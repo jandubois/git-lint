@@ -28,38 +28,40 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 		}
 		name, hash, author, track, upstream := parts[0], parts[1], parts[2], parts[3], parts[4]
 
-		if name == currentBranch || name == mainBranch {
+		if name == mainBranch {
 			continue
 		}
+		fixable := name != currentBranch
 
+		var r *Result
 		if strings.Contains(track, "gone") {
-			results = append(results, Result{
+			r = &Result{
 				Name:    fmt.Sprintf("branch/gone[%s]", name),
-				Status:  StatusWarn,
 				Message: fmt.Sprintf("upstream deleted (%s by %s)", hash, author),
-				Fixable: true,
-			})
+			}
 		} else if merged[name] {
-			results = append(results, Result{
+			r = &Result{
 				Name:    fmt.Sprintf("branch/merged[%s]", name),
-				Status:  StatusWarn,
 				Message: fmt.Sprintf("merged into %s (%s by %s)", mainBranch, hash, author),
-				Fixable: true,
-			})
+			}
 		} else if reason := stalePRCheckout(repo, name, hash, author, mainBranch); reason != "" {
-			results = append(results, Result{
+			r = &Result{
 				Name:    fmt.Sprintf("branch/pr[%s]", name),
-				Status:  StatusWarn,
 				Message: reason,
-				Fixable: true,
-			})
+			}
 		} else if upstream == "" && author != repo.Config.Identity.Name {
-			results = append(results, Result{
+			r = &Result{
 				Name:    fmt.Sprintf("branch/orphan[%s]", name),
-				Status:  StatusWarn,
 				Message: fmt.Sprintf("no upstream, tip by %s (%s)", author, hash),
-				Fixable: true,
-			})
+			}
+		}
+		if r != nil {
+			r.Status = StatusWarn
+			r.Fixable = fixable
+			if !fixable {
+				r.Message += " (checked out, switch branch to fix)"
+			}
+			results = append(results, *r)
 		}
 	}
 
