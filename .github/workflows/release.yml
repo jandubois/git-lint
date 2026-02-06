@@ -1,0 +1,45 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+
+      - name: Build binary
+        env:
+          GOOS: darwin
+          GOARCH: arm64
+          CGO_ENABLED: 0
+        run: go build -o git-lint-darwin-arm64 .
+
+      - name: Generate checksum
+        run: sha256sum git-lint-darwin-arm64 > git-lint-darwin-arm64.sha256
+
+      - name: Get tag annotation
+        id: tag
+        run: |
+          git fetch --tags --force
+          echo 'body<<EOF' >> $GITHUB_OUTPUT
+          git tag -l --format='%(contents)' ${{ github.ref_name }} >> $GITHUB_OUTPUT
+          echo 'EOF' >> $GITHUB_OUTPUT
+
+      - name: Create release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            git-lint-darwin-arm64
+            git-lint-darwin-arm64.sha256
+          body: ${{ steps.tag.outputs.body }}
