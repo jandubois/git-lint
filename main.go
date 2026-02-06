@@ -4,6 +4,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -29,6 +30,9 @@ func init() {
 func main() {
 	dir := flag.String("C", "", "run as if started in this directory")
 	fix := flag.Bool("fix", false, "auto-fix fixable violations")
+	var recursive bool
+	flag.BoolVar(&recursive, "R", false, "check each git repo in subdirectories")
+	flag.BoolVar(&recursive, "recursive", false, "check each git repo in subdirectories")
 	verbose := flag.Bool("verbose", false, "show all checks and all detail lines")
 	quiet := flag.Bool("quiet", false, "suppress detail lines")
 	flag.Parse()
@@ -46,16 +50,87 @@ func main() {
 		os.Exit(2)
 	}
 
+	opts := lintOptions{
+		cfg:     cfg,
+		fix:     *fix,
+		verbose: *verbose,
+		quiet:   *quiet,
+	}
+
+	if recursive {
+		os.Exit(lintRecursive(opts))
+	}
+
 	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
 	}
+	os.Exit(lintRepo(wd, opts))
+}
 
-	repo, err := NewRepo(wd, cfg)
+type lintOptions struct {
+	cfg     *Config
+	fix     bool
+	verbose bool
+	quiet   bool
+}
+
+func lintRecursive(opts lintOptions) int {
+	entries, err := os.ReadDir(".")
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(2)
+		return 2
+	}
+
+	exitCode := 0
+	first := true
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(entry.Name(), ".git")); err != nil {
+			continue
+		}
+
+		if !first {
+			fmt.Println()
+		}
+		first = false
+
+		if isTTY {
+			fmt.Printf("%s%s%s\n", ansiBold, entry.Name(), ansiReset)
+		} else {
+			fmt.Printf("=== %s ===\n", entry.Name())
+		}
+
+		absDir, err := filepath.Abs(entry.Name())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			if exitCode < 2 {
+				exitCode = 2
+			}
+			continue
+		}
+
+		code := lintRepo(absDir, opts)
+		if code > exitCode {
+			exitCode = code
+		}
+	}
+
+	if first {
+		fmt.Fprintf(os.Stderr, "no git repos found\n")
+		return 2
+	}
+	return exitCode
+}
+
+func lintRepo(dir string, opts lintOptions) int {
+	repo, err := NewRepo(dir, opts.cfg)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		return 2
 	}
 
 	checks := []Check{
@@ -72,7 +147,7 @@ func main() {
 	var allResults []Result
 	for _, c := range checks {
 		results := c.Check(repo)
-		if *fix {
+		if opts.fix {
 			results = c.Fix(repo, results)
 		}
 		allResults = append(allResults, results...)
@@ -80,14 +155,14 @@ func main() {
 
 	// Determine how many detail lines to show per result.
 	// -1 = unlimited (--verbose), 0 = none (--quiet), >0 = configured limit.
-	detailLimit := cfg.DetailLines
+	detailLimit := opts.cfg.DetailLines
 	if detailLimit == 0 {
 		detailLimit = 10
 	}
-	if *quiet {
+	if opts.quiet {
 		detailLimit = 0
 	}
-	if *verbose {
+	if opts.verbose {
 		detailLimit = -1
 	}
 
@@ -96,8 +171,8 @@ func main() {
 		if r.Status != StatusOK {
 			hasProblems = true
 		}
-		if *verbose || r.Status != StatusOK {
-			printResult(r, detailLimit, *verbose)
+		if opts.verbose || r.Status != StatusOK {
+			printResult(r, detailLimit, opts.verbose)
 		}
 	}
 
@@ -110,8 +185,9 @@ func main() {
 	}
 
 	if hasFailures(allResults) {
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 func printResult(r Result, detailLimit int, verbose bool) {
