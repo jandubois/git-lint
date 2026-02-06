@@ -110,7 +110,11 @@ func printResult(r Result, detailLimit int, verbose bool) {
 	if isTTY {
 		printResultTTY(r, verbose)
 	} else {
-		fmt.Printf("%-4s %-24s %s\n", r.Status, r.Name, r.Message)
+		fix := ""
+		if r.Fixable && r.Status == StatusWarn {
+			fix = " [--fix]"
+		}
+		fmt.Printf("%-4s %-24s %s%s\n", r.Status, r.Name, r.Message, fix)
 	}
 
 	if detailLimit == 0 || len(r.Details) == 0 {
@@ -169,12 +173,7 @@ func printResultTTY(r Result, verbose bool) {
 		content = r.Message
 	}
 
-	// Append --fix hint for fixable warnings.
-	suffix := rule
-	if r.Fixable && r.Status == StatusWarn {
-		suffix = rule + " → --fix"
-	}
-	fmt.Printf("%s%s  %s(%s)%s\n", marker, content, ansiDim, suffix, ansiReset)
+	fmt.Printf("%s%s  %s(%s)%s\n", marker, content, ansiDim, rule, ansiReset)
 }
 
 func statusColor(status string) string {
