@@ -26,10 +26,19 @@ func (c *UnpushedCheck) Check(repo *Repo) []Result {
 	now := time.Now()
 	var results []Result
 	for _, branch := range branches {
-		// Skip PR checkout branches; handled by BranchCleanupCheck.
-		mergeRef, _ := repo.Git("config", fmt.Sprintf("branch.%s.merge", branch))
-		if strings.HasPrefix(mergeRef, "refs/pull/") {
-			continue
+		// Skip branches handled by BranchCleanupCheck: PR checkouts
+		// and orphan branches by other authors.
+		remote, _ := repo.Git("config", fmt.Sprintf("branch.%s.remote", branch))
+		if remote == "" {
+			author, _ := repo.Git("log", "-1", "--format=%an", branch)
+			if author != "" && author != repo.Config.Identity.Name {
+				continue
+			}
+		} else {
+			mergeRef, _ := repo.Git("config", fmt.Sprintf("branch.%s.merge", branch))
+			if strings.HasPrefix(mergeRef, "refs/pull/") {
+				continue
+			}
 		}
 		commits := unpushedCommits(repo, branch)
 		if len(commits) == 0 {

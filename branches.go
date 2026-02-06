@@ -12,7 +12,7 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 	mainBranch := repo.MainBranch()
 
 	out, err := repo.Git("for-each-ref",
-		"--format=%(refname:short)|%(objectname:short)|%(authorname)|%(upstream:track)",
+		"--format=%(refname:short)|%(objectname:short)|%(authorname)|%(upstream:track)|%(upstream)",
 		"refs/heads/")
 	if err != nil || out == "" {
 		return nil
@@ -22,11 +22,11 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 
 	var results []Result
 	for _, line := range strings.Split(out, "\n") {
-		parts := strings.SplitN(line, "|", 4)
-		if len(parts) < 4 {
+		parts := strings.SplitN(line, "|", 5)
+		if len(parts) < 5 {
 			continue
 		}
-		name, hash, author, track := parts[0], parts[1], parts[2], parts[3]
+		name, hash, author, track, upstream := parts[0], parts[1], parts[2], parts[3], parts[4]
 
 		if name == currentBranch || name == mainBranch {
 			continue
@@ -51,6 +51,13 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 				Name:    fmt.Sprintf("branch/pr[%s]", name),
 				Status:  StatusWarn,
 				Message: reason,
+				Fixable: true,
+			})
+		} else if upstream == "" && author != repo.Config.Identity.Name {
+			results = append(results, Result{
+				Name:    fmt.Sprintf("branch/orphan[%s]", name),
+				Status:  StatusWarn,
+				Message: fmt.Sprintf("no upstream, tip by %s (%s)", author, hash),
 				Fixable: true,
 			})
 		}
