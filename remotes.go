@@ -80,29 +80,32 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 		}
 	}
 
-	// Rule 7: gh-resolved = base on the upstream remote only.
-	upstreamRemote := upstreamFor(repo, remotes)
-	if upstreamRemote != "" {
-		resolved := repo.GitConfig(fmt.Sprintf("remote.%s.gh-resolved", upstreamRemote))
+	// Rule 7: gh-resolved = base on the remote that main tracks.
+	prRemote := ""
+	if mainBranch != "" {
+		prRemote = repo.GitConfig(fmt.Sprintf("branch.%s.remote", mainBranch))
+	}
+	if prRemote != "" && prRemote != "origin" {
+		resolved := repo.GitConfig(fmt.Sprintf("remote.%s.gh-resolved", prRemote))
 		if resolved == "base" {
 			results = append(results, Result{
 				Name:    "remote/gh-resolved",
 				Status:  StatusOK,
-				Message: fmt.Sprintf("%s gh-resolved is base", upstreamRemote),
+				Message: fmt.Sprintf("%s gh-resolved is base", prRemote),
 			})
 		} else {
 			results = append(results, Result{
 				Name:    "remote/gh-resolved",
 				Status:  StatusFail,
-				Message: fmt.Sprintf("%s gh-resolved is %q, should be base", upstreamRemote, resolved),
+				Message: fmt.Sprintf("%s gh-resolved is %q, should be base", prRemote, resolved),
 				Fixable: true,
 			})
 		}
 	}
 
-	// Flag gh-resolved on non-upstream remotes.
+	// Flag gh-resolved on other remotes.
 	for _, name := range remotes {
-		if name == upstreamRemote {
+		if name == prRemote {
 			continue
 		}
 		resolved := repo.GitConfig(fmt.Sprintf("remote.%s.gh-resolved", name))
@@ -110,7 +113,7 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 			results = append(results, Result{
 				Name:    fmt.Sprintf("remote/gh-resolved[%s]", name),
 				Status:  StatusFail,
-				Message: fmt.Sprintf("%s has gh-resolved=%q, should only be on %s", name, resolved, upstreamRemote),
+				Message: fmt.Sprintf("%s has stale gh-resolved=%q", name, resolved),
 				Fixable: true,
 			})
 		}
@@ -162,20 +165,19 @@ func (c *RemoteCheck) Fix(repo *Repo, results []Result) []Result {
 			}
 
 		case r.Name == "remote/gh-resolved":
-			remotes, _ := repo.Remotes()
-			upstream := upstreamFor(repo, remotes)
-			if upstream == "" {
+			prRemote := repo.GitConfig(fmt.Sprintf("branch.%s.remote", mainBranch))
+			if prRemote == "" || prRemote == "origin" {
 				fixed = append(fixed, r)
 				continue
 			}
-			key := fmt.Sprintf("remote.%s.gh-resolved", upstream)
+			key := fmt.Sprintf("remote.%s.gh-resolved", prRemote)
 			if err := repo.SetGitConfig(key, "base"); err != nil {
 				fixed = append(fixed, r)
 			} else {
 				fixed = append(fixed, Result{
 					Name:    r.Name,
 					Status:  StatusFix,
-					Message: fmt.Sprintf("set %s gh-resolved to base", upstream),
+					Message: fmt.Sprintf("set %s gh-resolved to base", prRemote),
 				})
 			}
 
