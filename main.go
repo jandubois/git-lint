@@ -56,6 +56,7 @@ func main() {
 		&AttributionCheck{},
 		&StalenessCheck{},
 		&SubmoduleCheck{},
+		&BranchCleanupCheck{},
 		&UnpushedCheck{},
 	}
 

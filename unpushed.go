@@ -51,10 +51,16 @@ func (c *UnpushedCheck) Check(repo *Repo) []Result {
 			}
 		}
 		if stale > 0 {
+			msg := fmt.Sprintf("%d/%d commits older than %s", stale, len(details), formatDuration(maxAge))
+			// Show the tip author when it differs from the configured user.
+			author, _ := repo.Git("log", "-1", "--format=%an", branch)
+			if author != "" && author != repo.Config.Identity.Name {
+				msg += fmt.Sprintf(" (by %s)", author)
+			}
 			results = append(results, Result{
 				Name:    fmt.Sprintf("staleness/unpushed[%s]", branch),
 				Status:  StatusWarn,
-				Message: fmt.Sprintf("%d/%d commits older than %s", stale, len(details), formatDuration(maxAge)),
+				Message: msg,
 				Details: details,
 			})
 		}

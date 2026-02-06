@@ -94,6 +94,13 @@ A repo is **work** if any remote URL contains a configured work org (e.g. `githu
 | No uncommitted changes older than threshold | warn only |
 | No unpushed commits older than threshold | warn only |
 
+### Branch cleanup (all repos)
+
+| Check | Fix |
+|-------|-----|
+| No branches with deleted upstream (`[gone]`) | `git branch -D` |
+| No branches fully merged into main | `git branch -D` |
+
 ### Submodules (repos with `.gitmodules`)
 
 | Check | Fix |
