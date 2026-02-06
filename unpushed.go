@@ -26,6 +26,11 @@ func (c *UnpushedCheck) Check(repo *Repo) []Result {
 	now := time.Now()
 	var results []Result
 	for _, branch := range branches {
+		// Skip PR checkout branches; handled by BranchCleanupCheck.
+		mergeRef, _ := repo.Git("config", fmt.Sprintf("branch.%s.merge", branch))
+		if strings.HasPrefix(mergeRef, "refs/pull/") {
+			continue
+		}
 		commits := unpushedCommits(repo, branch)
 		if len(commits) == 0 {
 			continue
