@@ -100,6 +100,10 @@ A repo is **work** if any remote URL contains a configured work org (e.g. `githu
 |-------|-----|
 | No branches with deleted upstream (`[gone]`) | `git branch -D` |
 | No branches fully merged into main | `git branch -D` |
+| No stale `gh pr checkout` branches (PR merged or updated since checkout) | `git branch -D` |
+| No orphan branches by other authors (no upstream, tip by someone else) | `git branch -D` |
+
+The current branch is never deleted; switch to another branch first. Fixable warnings display in cyan on TTY output.
 
 ### Submodules (repos with `.gitmodules`)
 
