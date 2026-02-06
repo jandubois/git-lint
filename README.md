@@ -87,6 +87,7 @@ A repo is **work** if any remote URL contains a configured work org (e.g. `githu
 
 | Check | Fix |
 |-------|-----|
+| Submodule initialized | warn only |
 | Submodule commit matches parent record | warn only |
 | No uncommitted changes in submodule | warn only |
 | No untracked files in submodule | warn only |

@@ -37,6 +37,18 @@ func (c *SubmoduleCheck) Check(repo *Repo) []Result {
 func (c *SubmoduleCheck) checkSubmodule(repo *Repo, path string, prefix byte) []Result {
 	var results []Result
 
+	// Not initialized: submodule isn't cloned. Git commands in that
+	// directory would fall through to the parent repo, so skip the
+	// remaining checks.
+	if prefix == '-' {
+		results = append(results, Result{
+			Name:    fmt.Sprintf("submodule/init[%s]", path),
+			Status:  StatusWarn,
+			Message: "submodule not initialized",
+		})
+		return results
+	}
+
 	// Out of sync: checked-out commit differs from what the parent records.
 	if prefix == '+' {
 		results = append(results, Result{
