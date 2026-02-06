@@ -34,6 +34,7 @@ Create `~/.config/git-lint/config.json` (or `$XDG_CONFIG_HOME/git-lint/config.js
 
 ```json
 {
+  "protocol": "ssh",
   "detailLines": 10,
   "workOrgs": ["acme", "acme-labs"],
   "identity": {
@@ -55,6 +56,12 @@ Create `~/.config/git-lint/config.json` (or `$XDG_CONFIG_HOME/git-lint/config.js
 ### Repo classification
 
 A repo is **work** if any remote URL contains a configured work org (e.g. `github.com/acme/`). All other repos are **personal**. This classification drives identity and remote checks.
+
+### Remote protocol (all repos, when `protocol` is set)
+
+| Check | Fix |
+|-------|-----|
+| All remotes use configured protocol (`ssh` or `https`) | warn only |
 
 ### Identity (all repos)
 

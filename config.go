@@ -12,6 +12,7 @@ import (
 
 type Config struct {
 	WorkOrgs    []string         `json:"workOrgs"`
+	Protocol    string           `json:"protocol"`
 	Identity    IdentityConfig   `json:"identity"`
 	Thresholds  ThresholdsConfig `json:"thresholds"`
 	DetailLines int              `json:"detailLines"`
