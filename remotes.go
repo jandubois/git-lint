@@ -80,8 +80,9 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 		}
 	}
 
-	// Rule 7: gh-resolved = base on the upstream remote.
-	if upstreamRemote := upstreamFor(repo, remotes); upstreamRemote != "" {
+	// Rule 7: gh-resolved = base on the upstream remote only.
+	upstreamRemote := upstreamFor(repo, remotes)
+	if upstreamRemote != "" {
 		resolved := repo.GitConfig(fmt.Sprintf("remote.%s.gh-resolved", upstreamRemote))
 		if resolved == "base" {
 			results = append(results, Result{
@@ -94,6 +95,22 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 				Name:    "remote/gh-resolved",
 				Status:  StatusFail,
 				Message: fmt.Sprintf("%s gh-resolved is %q, should be base", upstreamRemote, resolved),
+				Fixable: true,
+			})
+		}
+	}
+
+	// Flag gh-resolved on non-upstream remotes.
+	for _, name := range remotes {
+		if name == upstreamRemote {
+			continue
+		}
+		resolved := repo.GitConfig(fmt.Sprintf("remote.%s.gh-resolved", name))
+		if resolved != "" {
+			results = append(results, Result{
+				Name:    fmt.Sprintf("remote/gh-resolved[%s]", name),
+				Status:  StatusFail,
+				Message: fmt.Sprintf("%s has gh-resolved=%q, should only be on %s", name, resolved, upstreamRemote),
 				Fixable: true,
 			})
 		}
@@ -159,6 +176,19 @@ func (c *RemoteCheck) Fix(repo *Repo, results []Result) []Result {
 					Name:    r.Name,
 					Status:  StatusFix,
 					Message: fmt.Sprintf("set %s gh-resolved to base", upstream),
+				})
+			}
+
+		case strings.HasPrefix(r.Name, "remote/gh-resolved["):
+			name := r.Name[len("remote/gh-resolved[") : len(r.Name)-1]
+			key := fmt.Sprintf("remote.%s.gh-resolved", name)
+			if err := repo.UnsetGitConfig(key); err != nil {
+				fixed = append(fixed, r)
+			} else {
+				fixed = append(fixed, Result{
+					Name:    r.Name,
+					Status:  StatusFix,
+					Message: fmt.Sprintf("removed gh-resolved from %s", name),
 				})
 			}
 

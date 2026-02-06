@@ -64,6 +64,12 @@ func (r *Repo) SetGitConfig(key, value string) error {
 	return err
 }
 
+// UnsetGitConfig removes a local git config value.
+func (r *Repo) UnsetGitConfig(key string) error {
+	_, err := r.Git("config", "--unset", key)
+	return err
+}
+
 // Remotes returns the list of remote names.
 func (r *Repo) Remotes() ([]string, error) {
 	out, err := r.Git("remote")
