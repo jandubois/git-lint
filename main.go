@@ -93,6 +93,28 @@ func lintRecursive(opts lintOptions) int {
 			continue
 		}
 
+		absDir, err := filepath.Abs(entry.Name())
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			if exitCode < 2 {
+				exitCode = 2
+			}
+			continue
+		}
+
+		results, code := runChecks(absDir, opts)
+		if code == 2 {
+			if exitCode < 2 {
+				exitCode = 2
+			}
+			continue
+		}
+
+		hasProblems := hasNonOK(results)
+		if opts.quiet && !hasProblems {
+			continue
+		}
+
 		if !first {
 			fmt.Println()
 		}
@@ -104,22 +126,16 @@ func lintRecursive(opts lintOptions) int {
 			fmt.Printf("=== %s ===\n", entry.Name())
 		}
 
-		absDir, err := filepath.Abs(entry.Name())
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			if exitCode < 2 {
-				exitCode = 2
-			}
-			continue
-		}
-
-		code := lintRepo(absDir, opts)
+		printResults(results, opts)
 		if code > exitCode {
 			exitCode = code
 		}
 	}
 
 	if first {
+		if opts.quiet {
+			return exitCode
+		}
 		fmt.Fprintf(os.Stderr, "no git repos found\n")
 		return 2
 	}
@@ -127,10 +143,19 @@ func lintRecursive(opts lintOptions) int {
 }
 
 func lintRepo(dir string, opts lintOptions) int {
+	results, code := runChecks(dir, opts)
+	if code == 2 {
+		return 2
+	}
+	printResults(results, opts)
+	return code
+}
+
+func runChecks(dir string, opts lintOptions) ([]Result, int) {
 	repo, err := NewRepo(dir, opts.cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		return 2
+		return nil, 2
 	}
 
 	checks := []Check{
@@ -153,6 +178,13 @@ func lintRepo(dir string, opts lintOptions) int {
 		allResults = append(allResults, results...)
 	}
 
+	if hasFailures(allResults) {
+		return allResults, 1
+	}
+	return allResults, 0
+}
+
+func printResults(results []Result, opts lintOptions) {
 	// Determine how many detail lines to show per result.
 	// -1 = unlimited (--verbose), 0 = none (--quiet), >0 = configured limit.
 	detailLimit := opts.cfg.DetailLines
@@ -167,7 +199,7 @@ func lintRepo(dir string, opts lintOptions) int {
 	}
 
 	hasProblems := false
-	for _, r := range allResults {
+	for _, r := range results {
 		if r.Status != StatusOK {
 			hasProblems = true
 		}
@@ -183,11 +215,15 @@ func lintRepo(dir string, opts lintOptions) int {
 			fmt.Println("repo ok")
 		}
 	}
+}
 
-	if hasFailures(allResults) {
-		return 1
+func hasNonOK(results []Result) bool {
+	for _, r := range results {
+		if r.Status != StatusOK {
+			return true
+		}
 	}
-	return 0
+	return false
 }
 
 func printResult(r Result, detailLimit int, verbose bool) {
