@@ -113,7 +113,7 @@ The current branch is never deleted; switch to another branch first. Fixable war
 
 | Check | Fix |
 |-------|-----|
-| Submodule initialized | warn only |
+| Submodule initialized | `git submodule update --init --recursive` |
 | Submodule commit matches parent record | warn only |
 | No uncommitted changes in submodule | warn only |
 | No untracked files in submodule | warn only |
