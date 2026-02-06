@@ -65,18 +65,31 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 		}
 	}
 
-	// Uncommitted changes age.
+	// Uncommitted changes and untracked files.
 	maxUncommitted := repo.Config.Thresholds.UncommittedMaxAge.Duration
 	porcelain, _ := repo.Git("status", "--porcelain")
-	if porcelain != "" {
-		age := uncommittedAge(repo)
-		lines := strings.Split(porcelain, "\n")
-		if age > maxUncommitted {
+	var uncommittedLines, untrackedLines []string
+	for _, line := range strings.Split(porcelain, "\n") {
+		if line == "" {
+			continue
+		}
+		if strings.HasPrefix(line, "?? ") {
+			untrackedLines = append(untrackedLines, line)
+		} else {
+			uncommittedLines = append(uncommittedLines, line)
+		}
+	}
+
+	age := uncommittedAge(repo)
+	stale := age > maxUncommitted
+
+	if len(uncommittedLines) > 0 {
+		if stale {
 			results = append(results, Result{
 				Name:    "staleness/uncommitted",
 				Status:  StatusWarn,
 				Message: fmt.Sprintf("uncommitted changes for %s (max %s)", formatDuration(age), formatDuration(maxUncommitted)),
-				Details: lines,
+				Details: uncommittedLines,
 			})
 		} else {
 			results = append(results, Result{
@@ -85,7 +98,26 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 				Message: "uncommitted changes are recent",
 			})
 		}
-	} else {
+	}
+
+	if len(untrackedLines) > 0 {
+		if stale {
+			results = append(results, Result{
+				Name:    "staleness/untracked",
+				Status:  StatusWarn,
+				Message: fmt.Sprintf("%d untracked files for %s (max %s)", len(untrackedLines), formatDuration(age), formatDuration(maxUncommitted)),
+				Details: untrackedLines,
+			})
+		} else {
+			results = append(results, Result{
+				Name:    "staleness/untracked",
+				Status:  StatusOK,
+				Message: "untracked files are recent",
+			})
+		}
+	}
+
+	if len(uncommittedLines) == 0 && len(untrackedLines) == 0 {
 		results = append(results, Result{
 			Name:    "staleness/uncommitted",
 			Status:  StatusOK,
