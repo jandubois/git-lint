@@ -62,26 +62,28 @@ func (c *SubmoduleCheck) checkSubmodule(repo *Repo, path string, prefix byte) []
 	absPath := filepath.Join(repo.Dir, path)
 	porcelain, err := gitInDir(absPath, "status", "--porcelain")
 	if err == nil && porcelain != "" {
-		var uncommitted, untracked int
+		var uncommittedDetails, untrackedDetails []string
 		for _, line := range strings.Split(porcelain, "\n") {
 			if strings.HasPrefix(line, "?? ") {
-				untracked++
+				untrackedDetails = append(untrackedDetails, line[3:])
 			} else {
-				uncommitted++
+				uncommittedDetails = append(uncommittedDetails, line)
 			}
 		}
-		if uncommitted > 0 {
+		if len(uncommittedDetails) > 0 {
 			results = append(results, Result{
 				Name:    fmt.Sprintf("submodule/uncommitted[%s]", path),
 				Status:  StatusWarn,
-				Message: fmt.Sprintf("%d uncommitted changes", uncommitted),
+				Message: fmt.Sprintf("%d uncommitted changes", len(uncommittedDetails)),
+				Details: uncommittedDetails,
 			})
 		}
-		if untracked > 0 {
+		if len(untrackedDetails) > 0 {
 			results = append(results, Result{
 				Name:    fmt.Sprintf("submodule/untracked[%s]", path),
 				Status:  StatusWarn,
-				Message: fmt.Sprintf("%d untracked files", untracked),
+				Message: fmt.Sprintf("%d untracked files", len(untrackedDetails)),
+				Details: untrackedDetails,
 			})
 		}
 	}
@@ -89,11 +91,12 @@ func (c *SubmoduleCheck) checkSubmodule(repo *Repo, path string, prefix byte) []
 	// Unpushed: commits ahead of upstream. Skip if no upstream configured.
 	unpushed, err := gitInDir(absPath, "log", "@{upstream}..HEAD", "--oneline")
 	if err == nil && unpushed != "" {
-		count := len(strings.Split(unpushed, "\n"))
+		lines := strings.Split(unpushed, "\n")
 		results = append(results, Result{
 			Name:    fmt.Sprintf("submodule/unpushed[%s]", path),
 			Status:  StatusWarn,
-			Message: fmt.Sprintf("%d unpushed commits", count),
+			Message: fmt.Sprintf("%d unpushed commits", len(lines)),
+			Details: lines,
 		})
 	}
 

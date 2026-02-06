@@ -8,28 +8,33 @@ import (
 
 type StalenessCheck struct{}
 
+type stashEntry struct {
+	date    time.Time
+	display string
+}
+
 func (c *StalenessCheck) Check(repo *Repo) []Result {
 	var results []Result
 
 	maxAge := repo.Config.Thresholds.StashMaxAge.Duration
 	maxCount := repo.Config.Thresholds.StashMaxCount
 
-	// Rules 9-10: stash age and count.
-	stashDates, err := stashEntryDates(repo)
+	entries, err := stashEntries(repo)
 	if err == nil {
-		// Rule 9: stash age.
+		// Stash age.
 		now := time.Now()
-		var old int
-		for _, d := range stashDates {
-			if now.Sub(d) > maxAge {
-				old++
+		var oldDetails []string
+		for _, e := range entries {
+			if now.Sub(e.date) > maxAge {
+				oldDetails = append(oldDetails, e.display)
 			}
 		}
-		if old > 0 {
+		if len(oldDetails) > 0 {
 			results = append(results, Result{
 				Name:    "staleness/stash-age",
 				Status:  StatusWarn,
-				Message: fmt.Sprintf("%d stash entries older than %s", old, formatDuration(maxAge)),
+				Message: fmt.Sprintf("%d stash entries older than %s", len(oldDetails), formatDuration(maxAge)),
+				Details: oldDetails,
 			})
 		} else {
 			results = append(results, Result{
@@ -39,31 +44,39 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 			})
 		}
 
-		// Rule 10: stash count.
-		if len(stashDates) > maxCount {
+		// Stash count.
+		if len(entries) > maxCount {
+			var allDetails []string
+			for _, e := range entries {
+				allDetails = append(allDetails, e.display)
+			}
 			results = append(results, Result{
 				Name:    "staleness/stash-count",
 				Status:  StatusWarn,
-				Message: fmt.Sprintf("%d entries (max %d)", len(stashDates), maxCount),
+				Message: fmt.Sprintf("%d entries (max %d)", len(entries), maxCount),
+				Details: allDetails,
 			})
 		} else {
 			results = append(results, Result{
 				Name:    "staleness/stash-count",
 				Status:  StatusOK,
-				Message: fmt.Sprintf("%d entries", len(stashDates)),
+				Message: fmt.Sprintf("%d entries", len(entries)),
 			})
 		}
 	}
 
-	// Rule 11: uncommitted changes age.
+	// Uncommitted changes age.
 	maxUncommitted := repo.Config.Thresholds.UncommittedMaxAge.Duration
-	if hasUncommitted(repo) {
+	porcelain, _ := repo.Git("status", "--porcelain")
+	if porcelain != "" {
 		age := uncommittedAge(repo)
+		lines := strings.Split(porcelain, "\n")
 		if age > maxUncommitted {
 			results = append(results, Result{
 				Name:    "staleness/uncommitted",
 				Status:  StatusWarn,
 				Message: fmt.Sprintf("uncommitted changes for %s (max %s)", formatDuration(age), formatDuration(maxUncommitted)),
+				Details: lines,
 			})
 		} else {
 			results = append(results, Result{
@@ -88,38 +101,33 @@ func (c *StalenessCheck) Fix(_ *Repo, results []Result) []Result {
 	return results
 }
 
-// stashEntryDates returns the date of each stash entry.
-func stashEntryDates(repo *Repo) ([]time.Time, error) {
-	// %ci = committer date, ISO format
-	out, err := repo.Git("stash", "list", "--format=%ci")
+// stashEntries returns each stash entry with its date and display string.
+func stashEntries(repo *Repo) ([]stashEntry, error) {
+	// %ci = committer date ISO, %gd = reflog selector, %s = subject
+	out, err := repo.Git("stash", "list", "--format=%ci %gd: %s")
 	if err != nil {
 		return nil, err
 	}
 	if out == "" {
 		return nil, nil
 	}
-	var dates []time.Time
+	var entries []stashEntry
 	for _, line := range strings.Split(out, "\n") {
-		t, err := time.Parse("2006-01-02 15:04:05 -0700", line)
+		if len(line) < 26 {
+			continue
+		}
+		t, err := time.Parse("2006-01-02 15:04:05 -0700", line[:25])
 		if err != nil {
 			continue
 		}
-		dates = append(dates, t)
+		entries = append(entries, stashEntry{date: t, display: line[26:]})
 	}
-	return dates, nil
-}
-
-// hasUncommitted checks for staged or unstaged changes.
-func hasUncommitted(repo *Repo) bool {
-	out, _ := repo.Git("status", "--porcelain")
-	return out != ""
+	return entries, nil
 }
 
 // uncommittedAge returns how long ago the working tree last changed,
-// approximated by the most recent mtime reported by git status.
-// Falls back to time since last commit if we can't determine mtime.
+// approximated by the time since the last commit.
 func uncommittedAge(repo *Repo) time.Duration {
-	// Use the last commit time as a proxy for when changes started accumulating.
 	out, err := repo.Git("log", "-1", "--format=%ci")
 	if err != nil || out == "" {
 		return 0
