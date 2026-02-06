@@ -74,14 +74,22 @@ A repo is **work** if any remote URL contains a configured work org (e.g. `githu
 | `user.name` matches configured name | `git config user.name` |
 | `user.email` matches work email (work repos) or either configured email (personal repos) | `git config user.email` |
 
+### Fork parent resolution (all repos with multiple remotes)
+
+For repos where `origin` is a GitHub fork, git-lint queries the fork parent via `gh api` and caches the result in `remote.origin.gh-parent`. This avoids repeated API calls and degrades gracefully when `gh` is unavailable or the network is down.
+
+| Check | Fix |
+|-------|-----|
+| `gh-resolved = base` on fork parent remote | set gh-resolved |
+| No stale `gh-resolved` on other remotes | unset gh-resolved |
+
 ### Remote structure (work repos with multiple remotes)
 
 | Check | Fix |
 |-------|-----|
 | `origin` points to personal fork, not work org | warn only |
-| main/master tracks an upstream (non-origin) remote | set tracking branch |
+| main/master tracks fork parent remote (falls back to work org remote) | set tracking branch |
 | main/master `pushRemote` = `no_push` | set pushRemote |
-| `gh-resolved = base` on upstream remote | set gh-resolved |
 
 ### Claude Code attribution (work repos)
 

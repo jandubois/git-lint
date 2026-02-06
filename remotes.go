@@ -8,15 +8,52 @@ import (
 type RemoteCheck struct{}
 
 func (c *RemoteCheck) Check(repo *Repo) []Result {
-	if !repo.Work {
-		return nil
-	}
 	remotes, _ := repo.Remotes()
 	if len(remotes) < 2 {
 		return nil
 	}
 
 	var results []Result
+
+	// gh-resolved checks apply to all repos where origin is a fork.
+	parentRemote := repo.ForkParentRemote()
+	if parentRemote != "" {
+		resolved := repo.GitConfig(fmt.Sprintf("remote.%s.gh-resolved", parentRemote))
+		if resolved == "base" {
+			results = append(results, Result{
+				Name:    "remote/gh-resolved",
+				Status:  StatusOK,
+				Message: fmt.Sprintf("%s gh-resolved is base", parentRemote),
+			})
+		} else {
+			results = append(results, Result{
+				Name:    "remote/gh-resolved",
+				Status:  StatusFail,
+				Message: fmt.Sprintf("%s gh-resolved is %q, should be base", parentRemote, resolved),
+				Fixable: true,
+			})
+		}
+
+		// Flag stale gh-resolved on other remotes.
+		for _, name := range remotes {
+			if name == parentRemote {
+				continue
+			}
+			resolved := repo.GitConfig(fmt.Sprintf("remote.%s.gh-resolved", name))
+			if resolved != "" {
+				results = append(results, Result{
+					Name:    fmt.Sprintf("remote/gh-resolved[%s]", name),
+					Status:  StatusFail,
+					Message: fmt.Sprintf("%s has stale gh-resolved=%q", name, resolved),
+					Fixable: true,
+				})
+			}
+		}
+	}
+
+	if !repo.Work {
+		return results
+	}
 
 	// Rule 4: origin should point to personal fork, not work org.
 	originURL := repo.RemoteURL("origin")
@@ -80,45 +117,6 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 		}
 	}
 
-	// Rule 7: gh-resolved = base on the remote that main tracks.
-	prRemote := ""
-	if mainBranch != "" {
-		prRemote = repo.GitConfig(fmt.Sprintf("branch.%s.remote", mainBranch))
-	}
-	if prRemote != "" && prRemote != "origin" {
-		resolved := repo.GitConfig(fmt.Sprintf("remote.%s.gh-resolved", prRemote))
-		if resolved == "base" {
-			results = append(results, Result{
-				Name:    "remote/gh-resolved",
-				Status:  StatusOK,
-				Message: fmt.Sprintf("%s gh-resolved is base", prRemote),
-			})
-		} else {
-			results = append(results, Result{
-				Name:    "remote/gh-resolved",
-				Status:  StatusFail,
-				Message: fmt.Sprintf("%s gh-resolved is %q, should be base", prRemote, resolved),
-				Fixable: true,
-			})
-		}
-	}
-
-	// Flag gh-resolved on other remotes.
-	for _, name := range remotes {
-		if name == prRemote {
-			continue
-		}
-		resolved := repo.GitConfig(fmt.Sprintf("remote.%s.gh-resolved", name))
-		if resolved != "" {
-			results = append(results, Result{
-				Name:    fmt.Sprintf("remote/gh-resolved[%s]", name),
-				Status:  StatusFail,
-				Message: fmt.Sprintf("%s has stale gh-resolved=%q", name, resolved),
-				Fixable: true,
-			})
-		}
-	}
-
 	return results
 }
 
@@ -165,19 +163,25 @@ func (c *RemoteCheck) Fix(repo *Repo, results []Result) []Result {
 			}
 
 		case r.Name == "remote/gh-resolved":
-			prRemote := repo.GitConfig(fmt.Sprintf("branch.%s.remote", mainBranch))
-			if prRemote == "" || prRemote == "origin" {
+			parentRemote := repo.ForkParentRemote()
+			if parentRemote == "" {
+				// Fall back to main's tracking remote.
+				if mainBranch != "" {
+					parentRemote = repo.GitConfig(fmt.Sprintf("branch.%s.remote", mainBranch))
+				}
+			}
+			if parentRemote == "" || parentRemote == "origin" {
 				fixed = append(fixed, r)
 				continue
 			}
-			key := fmt.Sprintf("remote.%s.gh-resolved", prRemote)
+			key := fmt.Sprintf("remote.%s.gh-resolved", parentRemote)
 			if err := repo.SetGitConfig(key, "base"); err != nil {
 				fixed = append(fixed, r)
 			} else {
 				fixed = append(fixed, Result{
 					Name:    r.Name,
 					Status:  StatusFix,
-					Message: fmt.Sprintf("set %s gh-resolved to base", prRemote),
+					Message: fmt.Sprintf("set %s gh-resolved to base", parentRemote),
 				})
 			}
 
@@ -212,8 +216,12 @@ func workOrgInURL(url string, orgs []string) string {
 	return ""
 }
 
-// upstreamFor finds the first non-origin remote whose URL matches a work org.
+// upstreamFor finds the upstream remote: prefers the fork parent remote,
+// falls back to the first non-origin remote whose URL matches a work org.
 func upstreamFor(repo *Repo, remotes []string) string {
+	if parent := repo.ForkParentRemote(); parent != "" {
+		return parent
+	}
 	for _, name := range remotes {
 		if name == "origin" {
 			continue
