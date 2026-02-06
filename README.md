@@ -96,6 +96,7 @@ A repo is **work** if any remote URL contains a configured work org (e.g. `githu
 | No stash entries older than threshold | warn only |
 | Stash count within threshold | warn only |
 | No uncommitted changes older than threshold | warn only |
+| No untracked files older than threshold | warn only |
 | No unpushed commits older than threshold | warn only |
 
 ### Branch cleanup (all repos)
