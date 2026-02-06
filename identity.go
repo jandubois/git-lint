@@ -26,26 +26,41 @@ func (c *IdentityCheck) Check(repo *Repo) []Result {
 		})
 	}
 
-	// Rules 2-3: user.email (work vs personal)
+	// Email rules:
+	//   - Work repos must use work email.
+	//   - Personal repos accept either work or personal email.
+	//   - Any other email always fails.
 	email := repo.GitConfig("user.email")
-	var wantEmail string
-	if repo.Work {
-		wantEmail = repo.Config.Identity.WorkEmail
-	} else {
-		wantEmail = repo.Config.Identity.PersonalEmail
-	}
-	if email == wantEmail {
+	workEmail := repo.Config.Identity.WorkEmail
+	personalEmail := repo.Config.Identity.PersonalEmail
+	isWork := email == workEmail
+	isPersonal := email == personalEmail
+
+	switch {
+	case repo.Work && isWork:
 		results = append(results, Result{
 			Name:    "identity/email",
 			Status:  StatusOK,
 			Message: email,
 		})
-	} else {
-		msg := fmt.Sprintf("got %q, want %q", email, wantEmail)
+	case repo.Work && !isWork:
 		results = append(results, Result{
 			Name:    "identity/email",
 			Status:  StatusFail,
-			Message: msg,
+			Message: fmt.Sprintf("got %q, want %q", email, workEmail),
+			Fixable: true,
+		})
+	case !repo.Work && (isWork || isPersonal):
+		results = append(results, Result{
+			Name:    "identity/email",
+			Status:  StatusOK,
+			Message: email,
+		})
+	default:
+		results = append(results, Result{
+			Name:    "identity/email",
+			Status:  StatusFail,
+			Message: fmt.Sprintf("got %q, want %q or %q", email, workEmail, personalEmail),
 			Fixable: true,
 		})
 	}
@@ -72,11 +87,9 @@ func (c *IdentityCheck) Fix(repo *Repo, results []Result) []Result {
 				})
 			}
 		case "identity/email":
-			var wantEmail string
+			wantEmail := repo.Config.Identity.PersonalEmail
 			if repo.Work {
 				wantEmail = repo.Config.Identity.WorkEmail
-			} else {
-				wantEmail = repo.Config.Identity.PersonalEmail
 			}
 			if err := repo.SetGitConfig("user.email", wantEmail); err != nil {
 				fixed = append(fixed, r)
