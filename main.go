@@ -34,6 +34,8 @@ func main() {
 		&RemoteCheck{},
 		&AttributionCheck{},
 		&StalenessCheck{},
+		&SubmoduleCheck{},
+		&UnpushedCheck{},
 	}
 
 	var allResults []Result

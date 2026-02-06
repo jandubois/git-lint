@@ -23,9 +23,10 @@ type IdentityConfig struct {
 }
 
 type ThresholdsConfig struct {
-	StashMaxAge      Duration `json:"stashMaxAge"`
-	StashMaxCount    int      `json:"stashMaxCount"`
+	StashMaxAge       Duration `json:"stashMaxAge"`
+	StashMaxCount     int      `json:"stashMaxCount"`
 	UncommittedMaxAge Duration `json:"uncommittedMaxAge"`
+	UnpushedMaxAge    Duration `json:"unpushedMaxAge"`
 }
 
 // Duration wraps time.Duration with JSON unmarshaling from strings like "7d", "1d", "12h".
