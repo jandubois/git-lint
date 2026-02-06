@@ -27,10 +27,18 @@ func init() {
 }
 
 func main() {
+	dir := flag.String("C", "", "run as if started in this directory")
 	fix := flag.Bool("fix", false, "auto-fix fixable violations")
 	verbose := flag.Bool("verbose", false, "show all checks and all detail lines")
 	quiet := flag.Bool("quiet", false, "suppress detail lines")
 	flag.Parse()
+
+	if *dir != "" {
+		if err := os.Chdir(*dir); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(2)
+		}
+	}
 
 	cfg, err := loadConfig()
 	if err != nil {
@@ -38,13 +46,13 @@ func main() {
 		os.Exit(2)
 	}
 
-	dir, err := os.Getwd()
+	wd, err := os.Getwd()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
 	}
 
-	repo, err := NewRepo(dir, cfg)
+	repo, err := NewRepo(wd, cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
