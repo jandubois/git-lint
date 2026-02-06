@@ -15,6 +15,7 @@ const (
 	ansiRed    = "\033[31m"
 	ansiGreen  = "\033[32m"
 	ansiYellow = "\033[33m"
+	ansiCyan   = "\033[36m"
 )
 
 var isTTY bool
@@ -138,13 +139,15 @@ func printResult(r Result, detailLimit int, verbose bool) {
 func printResultTTY(r Result, verbose bool) {
 	rule, param := splitResultName(r.Name)
 
-	// Status marker: verbose always shows one; non-verbose only for fail/fix.
+	// Status marker: verbose always shows one; non-verbose only for fail/fix/fixable.
 	var marker string
 	switch r.Status {
 	case StatusOK:
 		marker = ansiGreen + "✓" + ansiReset + " "
 	case StatusWarn:
-		if verbose {
+		if r.Fixable {
+			marker = ansiCyan + "~" + ansiReset + " "
+		} else if verbose {
 			marker = ansiYellow + "!" + ansiReset + " "
 		}
 	case StatusFail:
@@ -154,15 +157,24 @@ func printResultTTY(r Result, verbose bool) {
 	}
 
 	// Main content: param bold+colored, then message.
+	// Fixable warnings use cyan to distinguish from manual warnings.
 	var content string
 	if param != "" {
 		color := statusColor(r.Status)
+		if r.Fixable && r.Status == StatusWarn {
+			color = ansiCyan
+		}
 		content = color + ansiBold + param + ansiReset + ": " + r.Message
 	} else {
 		content = r.Message
 	}
 
-	fmt.Printf("%s%s  %s(%s)%s\n", marker, content, ansiDim, rule, ansiReset)
+	// Append --fix hint for fixable warnings.
+	suffix := rule
+	if r.Fixable && r.Status == StatusWarn {
+		suffix = rule + " → --fix"
+	}
+	fmt.Printf("%s%s  %s(%s)%s\n", marker, content, ansiDim, suffix, ansiReset)
 }
 
 func statusColor(status string) string {
