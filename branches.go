@@ -46,6 +46,13 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 				Message: fmt.Sprintf("merged into %s (%s by %s)", mainBranch, hash, author),
 				Fixable: true,
 			})
+		} else if reason := stalePRCheckout(repo, name, hash, author, mainBranch); reason != "" {
+			results = append(results, Result{
+				Name:    fmt.Sprintf("branch/pr[%s]", name),
+				Status:  StatusWarn,
+				Message: reason,
+				Fixable: true,
+			})
 		}
 	}
 
@@ -83,6 +90,48 @@ func (c *BranchCleanupCheck) Fix(repo *Repo, results []Result) []Result {
 		}
 	}
 	return fixed
+}
+
+// stalePRCheckout returns a non-empty reason if branch tracks a refs/pull/
+// ref and is stale: either the branch is already merged into main, or the
+// local commit no longer matches the remote PR head.
+func stalePRCheckout(repo *Repo, branch, shortHash, author, mainBranch string) string {
+	mergeRef, _ := repo.Git("config", fmt.Sprintf("branch.%s.merge", branch))
+	if !strings.HasPrefix(mergeRef, "refs/pull/") {
+		return ""
+	}
+	remote, _ := repo.Git("config", fmt.Sprintf("branch.%s.remote", branch))
+	if remote == "" {
+		return ""
+	}
+
+	// Extract PR number from refs/pull/<number>/head.
+	pr := strings.Split(mergeRef, "/")[2]
+	detail := fmt.Sprintf("(%s by %s)", shortHash, author)
+
+	// Condition 1: branch is an ancestor of main (true merge).
+	if mainBranch != "" {
+		ref := mainBranch + "@{upstream}"
+		_, err := repo.Git("merge-base", "--is-ancestor", branch, ref)
+		if err != nil {
+			_, err = repo.Git("merge-base", "--is-ancestor", branch, mainBranch)
+		}
+		if err == nil {
+			return fmt.Sprintf("PR #%s merged %s", pr, detail)
+		}
+	}
+
+	// Condition 2: local tip differs from remote PR ref.
+	lsOut, err := repo.Git("ls-remote", remote, mergeRef)
+	if err != nil || lsOut == "" {
+		return ""
+	}
+	remoteHash := strings.Fields(lsOut)[0]
+	if !strings.HasPrefix(remoteHash, shortHash) {
+		return fmt.Sprintf("PR #%s updated since checkout %s", pr, detail)
+	}
+
+	return ""
 }
 
 // mergedBranches returns names of local branches fully merged into the
