@@ -5,8 +5,8 @@ import (
 	"strings"
 )
 
-// parseGitHubRepo extracts owner and repo from a GitHub URL.
-// Returns "", "" if the URL is not a GitHub URL.
+// parseGitHubRepo extracts owner and repo from a GitHub URL or bare "owner/repo" slug.
+// Returns "", "" if the input is not a recognized GitHub reference.
 func parseGitHubRepo(url string) (owner, repo string) {
 	var path string
 	switch {
@@ -14,11 +14,14 @@ func parseGitHubRepo(url string) (owner, repo string) {
 		path = url[len("https://github.com/"):]
 	case strings.HasPrefix(url, "git@github.com:"):
 		path = url[len("git@github.com:"):]
+	case !strings.Contains(url, "://") && !strings.Contains(url, "@"):
+		// Bare "owner/repo" slug (no URL prefix).
+		path = url
 	default:
 		return "", ""
 	}
 	parts := strings.SplitN(path, "/", 3)
-	if len(parts) < 2 {
+	if len(parts) < 2 || parts[0] == "" || parts[1] == "" {
 		return "", ""
 	}
 	return parts[0], strings.TrimSuffix(parts[1], ".git")

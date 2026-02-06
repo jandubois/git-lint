@@ -29,6 +29,7 @@ func init() {
 
 func main() {
 	dir := flag.String("C", "", "run as if started in this directory")
+	clone := flag.String("clone", "", "clone a GitHub repo and configure it")
 	fix := flag.Bool("fix", false, "auto-fix fixable violations")
 	var recursive bool
 	flag.BoolVar(&recursive, "R", false, "check each git repo in subdirectories")
@@ -48,6 +49,14 @@ func main() {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(2)
+	}
+
+	if *clone != "" {
+		if err := cloneRepo(cfg, *clone); err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(2)
+		}
+		return
 	}
 
 	opts := lintOptions{

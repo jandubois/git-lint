@@ -24,6 +24,7 @@ git lint --verbose          # show all checks with full details
 git lint --fix              # fix what it can, warn for the rest
 git-lint -C ~/git -R        # check every git repo under ~/git
 git-lint -C ~/git -R --fix  # fix across all repos
+git-lint --clone owner/repo # clone a GitHub repo and configure it
 ```
 
 Use `git -C <path> lint` or `git-lint -C <path>` to run in a different directory. `-R` (`--recursive`) scans immediate subdirectories for git repos and checks each one.
@@ -31,6 +32,21 @@ Use `git -C <path> lint` or `git-lint -C <path>` to run in a different directory
 Exit 0 means all checks pass (warnings are acceptable). Exit 1 means at least one check failed.
 
 Warnings and failures include detail lines (filenames, commit subjects, etc.). By default, each result shows up to `detailLines` lines of detail; `--quiet` suppresses them; `--verbose` shows all.
+
+### Cloning
+
+`--clone` accepts a GitHub URL or bare `owner/repo` slug. It clones the repo into a local directory named after the repo and runs `--fix` to apply all configuration rules.
+
+Clone strategies (based on the authenticated `gh` user):
+
+| Scenario | Origin | Upstream |
+|----------|--------|----------|
+| I own the repo (not a fork) | my repo | none |
+| I own the repo (a fork) | my repo | fork parent |
+| Someone else's repo, I have a fork | my fork | original repo |
+| Someone else's repo, no fork | original repo | none |
+
+Extra URL path segments (pull request URLs, commit URLs) are ignored during parsing; only the `owner/repo` portion matters.
 
 ## Configuration
 
