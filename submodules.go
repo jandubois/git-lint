@@ -45,6 +45,7 @@ func (c *SubmoduleCheck) checkSubmodule(repo *Repo, path string, prefix byte) []
 			Name:    fmt.Sprintf("submodule/init[%s]", path),
 			Status:  StatusWarn,
 			Message: "submodule not initialized",
+			Fixable: true,
 		})
 		return results
 	}
@@ -103,8 +104,43 @@ func (c *SubmoduleCheck) checkSubmodule(repo *Repo, path string, prefix byte) []
 	return results
 }
 
-func (c *SubmoduleCheck) Fix(_ *Repo, results []Result) []Result {
-	return results
+func (c *SubmoduleCheck) Fix(repo *Repo, results []Result) []Result {
+	// Collect uninitialized submodule paths and init them in one call.
+	var paths []string
+	for _, r := range results {
+		if !r.Fixable {
+			continue
+		}
+		_, param := splitResultName(r.Name)
+		if param != "" {
+			paths = append(paths, param)
+		}
+	}
+	if len(paths) == 0 {
+		return results
+	}
+
+	args := append([]string{"submodule", "update", "--init", "--recursive", "--"}, paths...)
+	_, err := repo.Git(args...)
+
+	var fixed []Result
+	for _, r := range results {
+		if !r.Fixable {
+			fixed = append(fixed, r)
+			continue
+		}
+		_, param := splitResultName(r.Name)
+		if err != nil {
+			fixed = append(fixed, r)
+		} else {
+			fixed = append(fixed, Result{
+				Name:    r.Name,
+				Status:  StatusFix,
+				Message: fmt.Sprintf("initialized %s", param),
+			})
+		}
+	}
+	return fixed
 }
 
 // submoduleStatus parses `git submodule status` into paths and prefix characters.
