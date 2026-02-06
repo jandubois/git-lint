@@ -59,7 +59,7 @@ Create `~/.config/git-lint/config.json` (or `$XDG_CONFIG_HOME/git-lint/config.js
 
 ### Repo classification
 
-A repo is **work** if any remote URL contains a configured work org (e.g. `github.com/acme/`). All other repos are **personal**. This classification drives identity and remote checks.
+A repo is **work** if any remote URL contains a configured work org (e.g. `github.com/acme/`) or if `user.email` matches the configured work email. All other repos are **personal**.
 
 ### Remote protocol (all repos, when `protocol` is set)
 
@@ -72,7 +72,7 @@ A repo is **work** if any remote URL contains a configured work org (e.g. `githu
 | Check | Fix |
 |-------|-----|
 | `user.name` matches configured name | `git config user.name` |
-| `user.email` matches work email (work repos) or personal email | `git config user.email` |
+| `user.email` matches work email (work repos) or either configured email (personal repos) | `git config user.email` |
 
 ### Remote structure (work repos with multiple remotes)
 
