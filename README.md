@@ -18,12 +18,15 @@ cp git-lint /usr/local/bin/
 ## Usage
 
 ```
-git lint              # report violations
+git lint              # report violations with detail lines
+git lint --quiet      # report violations without detail lines
+git lint --verbose    # show all checks with full details
 git lint --fix        # fix what it can, warn for the rest
-git lint --verbose    # show all checks, including passing ones
 ```
 
 Exit 0 means all checks pass (warnings are acceptable). Exit 1 means at least one check failed.
+
+Warnings and failures include detail lines (filenames, commit subjects, etc.). By default, each result shows up to `detailLines` lines of detail; `--quiet` suppresses them; `--verbose` shows all.
 
 ## Configuration
 
@@ -31,6 +34,7 @@ Create `~/.config/git-lint/config.json` (or `$XDG_CONFIG_HOME/git-lint/config.js
 
 ```json
 {
+  "detailLines": 10,
   "workOrgs": ["acme", "acme-labs"],
   "identity": {
     "name": "Alice Example",

@@ -11,9 +11,10 @@ import (
 )
 
 type Config struct {
-	WorkOrgs   []string          `json:"workOrgs"`
-	Identity   IdentityConfig    `json:"identity"`
-	Thresholds ThresholdsConfig  `json:"thresholds"`
+	WorkOrgs    []string         `json:"workOrgs"`
+	Identity    IdentityConfig   `json:"identity"`
+	Thresholds  ThresholdsConfig `json:"thresholds"`
+	DetailLines int              `json:"detailLines"`
 }
 
 type IdentityConfig struct {

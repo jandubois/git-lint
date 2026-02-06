@@ -8,7 +8,8 @@ import (
 
 func main() {
 	fix := flag.Bool("fix", false, "auto-fix fixable violations")
-	verbose := flag.Bool("verbose", false, "show all checks including passing ones")
+	verbose := flag.Bool("verbose", false, "show all checks and all detail lines")
+	quiet := flag.Bool("quiet", false, "suppress detail lines")
 	flag.Parse()
 
 	cfg, err := loadConfig()
@@ -47,13 +48,26 @@ func main() {
 		allResults = append(allResults, results...)
 	}
 
+	// Determine how many detail lines to show per result.
+	// -1 = unlimited (--verbose), 0 = none (--quiet), >0 = configured limit.
+	detailLimit := cfg.DetailLines
+	if detailLimit == 0 {
+		detailLimit = 10
+	}
+	if *quiet {
+		detailLimit = 0
+	}
+	if *verbose {
+		detailLimit = -1
+	}
+
 	hasProblems := false
 	for _, r := range allResults {
 		if r.Status != StatusOK {
 			hasProblems = true
 		}
 		if *verbose || r.Status != StatusOK {
-			printResult(r)
+			printResult(r, detailLimit)
 		}
 	}
 
@@ -66,8 +80,21 @@ func main() {
 	}
 }
 
-func printResult(r Result) {
+func printResult(r Result, detailLimit int) {
 	fmt.Printf("%-4s %-24s %s\n", r.Status, r.Name, r.Message)
+	if detailLimit == 0 || len(r.Details) == 0 {
+		return
+	}
+	show := len(r.Details)
+	if detailLimit > 0 && show > detailLimit {
+		show = detailLimit
+	}
+	for _, d := range r.Details[:show] {
+		fmt.Printf("      %s\n", d)
+	}
+	if remaining := len(r.Details) - show; remaining > 0 {
+		fmt.Printf("      ...and %d more\n", remaining)
+	}
 }
 
 func hasFailures(results []Result) bool {
