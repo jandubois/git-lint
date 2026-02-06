@@ -26,34 +26,38 @@ type claudeAttribution struct {
 }
 
 func (c *AttributionCheck) Check(repo *Repo) []Result {
-	if !repo.Work {
-		return nil
-	}
-
 	var results []Result
 
-	path := filepath.Join(repo.Dir, settingsRelPath)
-	data, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			results = append(results, Result{
-				Name:    "claude/attribution",
-				Status:  StatusFail,
-				Message: fmt.Sprintf("%s missing", settingsRelPath),
-				Fixable: true,
-			})
+	if repo.Work {
+		path := filepath.Join(repo.Dir, settingsRelPath)
+		data, err := os.ReadFile(path)
+		if err != nil {
+			if os.IsNotExist(err) {
+				results = append(results, Result{
+					Name:    "claude/attribution",
+					Status:  StatusFail,
+					Message: fmt.Sprintf("%s missing", settingsRelPath),
+					Fixable: true,
+				})
+			} else {
+				results = append(results, Result{
+					Name:    "claude/attribution",
+					Status:  StatusWarn,
+					Message: fmt.Sprintf("cannot read %s: %v", settingsRelPath, err),
+				})
+			}
 		} else {
-			results = append(results, Result{
-				Name:    "claude/attribution",
-				Status:  StatusWarn,
-				Message: fmt.Sprintf("cannot read %s: %v", settingsRelPath, err),
-			})
+			results = append(results, c.checkAttribution(data)...)
 		}
-	} else {
-		results = append(results, c.checkAttribution(data)...)
 	}
 
-	results = append(results, c.checkExclude(repo)...)
+	// Exclude claude files in repos with multiple remotes (shared repos)
+	// or any work repo.
+	remotes, _ := repo.Remotes()
+	if repo.Work || len(remotes) > 1 {
+		results = append(results, c.checkExclude(repo)...)
+	}
+
 	return results
 }
 
@@ -102,7 +106,7 @@ func (c *AttributionCheck) checkAttribution(data []byte) []Result {
 	}}
 }
 
-// Patterns that should be in .git/info/exclude for work repos.
+// Patterns that should be in .git/info/exclude for shared repos.
 var claudeExcludePatterns = []string{"CLAUDE.md", ".claude/"}
 
 func (c *AttributionCheck) checkExclude(repo *Repo) []Result {
