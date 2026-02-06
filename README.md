@@ -40,7 +40,8 @@ Create `~/.config/git-lint/config.json` (or `$XDG_CONFIG_HOME/git-lint/config.js
   "thresholds": {
     "stashMaxAge": "7d",
     "stashMaxCount": 2,
-    "uncommittedMaxAge": "1d"
+    "uncommittedMaxAge": "1d",
+    "unpushedMaxAge": "2d"
   }
 }
 ```
@@ -80,6 +81,16 @@ A repo is **work** if any remote URL contains a configured work org (e.g. `githu
 | No stash entries older than threshold | warn only |
 | Stash count within threshold | warn only |
 | No uncommitted changes older than threshold | warn only |
+| No unpushed commits older than threshold | warn only |
+
+### Submodules (repos with `.gitmodules`)
+
+| Check | Fix |
+|-------|-----|
+| Submodule commit matches parent record | warn only |
+| No uncommitted changes in submodule | warn only |
+| No untracked files in submodule | warn only |
+| No unpushed commits in submodule | warn only |
 
 ## License
 
