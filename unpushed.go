@@ -14,10 +14,8 @@ func (c *UnpushedCheck) Check(repo *Repo) []Result {
 		return nil
 	}
 
-	// Find commits that exist on local branches but not on any remote-tracking branch.
-	// Format: <40-char hash> <25-char date> <subject>
-	out, err := repo.Git("log", "--branches", "--not", "--remotes", "--format=%H %ci %s")
-	if err != nil || out == "" {
+	branches, err := localBranches(repo)
+	if err != nil || len(branches) == 0 {
 		return []Result{{
 			Name:    "staleness/unpushed",
 			Status:  StatusOK,
@@ -26,44 +24,75 @@ func (c *UnpushedCheck) Check(repo *Repo) []Result {
 	}
 
 	now := time.Now()
-	var total, stale int
-	var details []string
-	for _, line := range strings.Split(out, "\n") {
-		total++
-		if len(line) < 42 {
+	var results []Result
+	for _, branch := range branches {
+		commits := unpushedCommits(repo, branch)
+		if len(commits) == 0 {
 			continue
 		}
-		dateStr := line[41:66]
-		subject := ""
-		if len(line) > 67 {
-			subject = line[67:]
+		var stale int
+		var details []string
+		for _, line := range commits {
+			if len(line) < 42 {
+				continue
+			}
+			dateStr := line[41:66]
+			subject := ""
+			if len(line) > 67 {
+				subject = line[67:]
+			}
+			t, err := time.Parse("2006-01-02 15:04:05 -0700", dateStr)
+			if err != nil {
+				continue
+			}
+			details = append(details, fmt.Sprintf("%s %s (%s ago)", line[:7], subject, formatDuration(now.Sub(t))))
+			if now.Sub(t) > maxAge {
+				stale++
+			}
 		}
-		t, err := time.Parse("2006-01-02 15:04:05 -0700", dateStr)
-		if err != nil {
-			continue
+		if stale > 0 {
+			results = append(results, Result{
+				Name:    fmt.Sprintf("staleness/unpushed[%s]", branch),
+				Status:  StatusWarn,
+				Message: fmt.Sprintf("%d/%d commits older than %s", stale, len(details), formatDuration(maxAge)),
+				Details: details,
+			})
 		}
-		detail := fmt.Sprintf("%s %s (%s ago)", line[:7], subject, formatDuration(now.Sub(t)))
-		if now.Sub(t) > maxAge {
-			stale++
-		}
-		details = append(details, detail)
 	}
 
-	if stale > 0 {
+	if len(results) == 0 {
 		return []Result{{
 			Name:    "staleness/unpushed",
-			Status:  StatusWarn,
-			Message: fmt.Sprintf("%d/%d unpushed commits older than %s", stale, total, formatDuration(maxAge)),
-			Details: details,
+			Status:  StatusOK,
+			Message: "no unpushed commits",
 		}}
 	}
-	return []Result{{
-		Name:    "staleness/unpushed",
-		Status:  StatusOK,
-		Message: fmt.Sprintf("%d unpushed commits (all recent)", total),
-	}}
+	return results
 }
 
 func (c *UnpushedCheck) Fix(_ *Repo, results []Result) []Result {
 	return results
+}
+
+func localBranches(repo *Repo) ([]string, error) {
+	out, err := repo.Git("for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	if err != nil || out == "" {
+		return nil, err
+	}
+	return strings.Split(out, "\n"), nil
+}
+
+// unpushedCommits returns raw log lines for commits on branch that aren't
+// on any remote. Uses upstream..branch when an upstream is configured;
+// falls back to branch --not --remotes otherwise.
+func unpushedCommits(repo *Repo, branch string) []string {
+	format := "--format=%H %ci %s"
+	out, err := repo.Git("log", branch+"@{upstream}.."+branch, format)
+	if err != nil {
+		out, _ = repo.Git("log", branch, "--not", "--remotes", format)
+	}
+	if out == "" {
+		return nil
+	}
+	return strings.Split(out, "\n")
 }
