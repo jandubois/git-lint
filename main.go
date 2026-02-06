@@ -32,6 +32,7 @@ func main() {
 
 	checks := []Check{
 		&IdentityCheck{},
+		&ProtocolCheck{},
 		&RemoteCheck{},
 		&AttributionCheck{},
 		&StalenessCheck{},
