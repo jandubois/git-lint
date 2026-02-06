@@ -80,27 +80,20 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 		}
 	}
 
-	// Rule 7: gh-resolved = base on a non-origin work remote.
-	for _, name := range remotes {
-		if name == "origin" {
-			continue
-		}
-		url := repo.RemoteURL(name)
-		if workOrgInURL(url, repo.Config.WorkOrgs) == "" {
-			continue
-		}
-		resolved := repo.GitConfig(fmt.Sprintf("remote.%s.gh-resolved", name))
+	// Rule 7: gh-resolved = base on the upstream remote.
+	if upstreamRemote := upstreamFor(repo, remotes); upstreamRemote != "" {
+		resolved := repo.GitConfig(fmt.Sprintf("remote.%s.gh-resolved", upstreamRemote))
 		if resolved == "base" {
 			results = append(results, Result{
-				Name:    fmt.Sprintf("remote/gh-resolved[%s]", name),
+				Name:    "remote/gh-resolved",
 				Status:  StatusOK,
-				Message: fmt.Sprintf("%s gh-resolved is base", name),
+				Message: fmt.Sprintf("%s gh-resolved is base", upstreamRemote),
 			})
 		} else {
 			results = append(results, Result{
-				Name:    fmt.Sprintf("remote/gh-resolved[%s]", name),
+				Name:    "remote/gh-resolved",
 				Status:  StatusFail,
-				Message: fmt.Sprintf("%s gh-resolved is %q, should be base", name, resolved),
+				Message: fmt.Sprintf("%s gh-resolved is %q, should be base", upstreamRemote, resolved),
 				Fixable: true,
 			})
 		}
@@ -151,17 +144,21 @@ func (c *RemoteCheck) Fix(repo *Repo, results []Result) []Result {
 				})
 			}
 
-		case strings.HasPrefix(r.Name, "remote/gh-resolved["):
-			// Extract remote name from "remote/gh-resolved[name]".
-			name := r.Name[len("remote/gh-resolved[") : len(r.Name)-1]
-			key := fmt.Sprintf("remote.%s.gh-resolved", name)
+		case r.Name == "remote/gh-resolved":
+			remotes, _ := repo.Remotes()
+			upstream := upstreamFor(repo, remotes)
+			if upstream == "" {
+				fixed = append(fixed, r)
+				continue
+			}
+			key := fmt.Sprintf("remote.%s.gh-resolved", upstream)
 			if err := repo.SetGitConfig(key, "base"); err != nil {
 				fixed = append(fixed, r)
 			} else {
 				fixed = append(fixed, Result{
 					Name:    r.Name,
 					Status:  StatusFix,
-					Message: fmt.Sprintf("set %s gh-resolved to base", name),
+					Message: fmt.Sprintf("set %s gh-resolved to base", upstream),
 				})
 			}
 
