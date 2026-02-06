@@ -61,7 +61,7 @@ A repo is **work** if any remote URL contains a configured work org (e.g. `githu
 
 | Check | Fix |
 |-------|-----|
-| All remotes use configured protocol (`ssh` or `https`) | warn only |
+| All remotes use configured protocol (`ssh` or `https`) | `git remote set-url` (GitHub only) |
 
 ### Identity (all repos)
 
