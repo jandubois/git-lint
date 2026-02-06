@@ -88,6 +88,7 @@ A repo is **work** if any remote URL contains a configured work org (e.g. `githu
 | Check | Fix |
 |-------|-----|
 | `.claude/settings.local.json` has empty attribution | create/update file |
+| `CLAUDE.md` and `.claude/` in `.git/info/exclude` | append to exclude file |
 
 ### Staleness (all repos)
 
