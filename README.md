@@ -18,11 +18,15 @@ cp git-lint /usr/local/bin/
 ## Usage
 
 ```
-git lint              # report violations with detail lines
-git lint --quiet      # report violations without detail lines
-git lint --verbose    # show all checks with full details
-git lint --fix        # fix what it can, warn for the rest
+git lint                    # report violations with detail lines
+git lint --quiet            # report violations without detail lines
+git lint --verbose          # show all checks with full details
+git lint --fix              # fix what it can, warn for the rest
+git-lint -C ~/git -R        # check every git repo under ~/git
+git-lint -C ~/git -R --fix  # fix across all repos
 ```
+
+Use `git -C <path> lint` or `git-lint -C <path>` to run in a different directory. `-R` (`--recursive`) scans immediate subdirectories for git repos and checks each one.
 
 Exit 0 means all checks pass (warnings are acceptable). Exit 1 means at least one check failed.
 
