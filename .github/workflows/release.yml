@@ -34,7 +34,9 @@ jobs:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
-        run: go build -o git-lint-${{ matrix.goos }}-${{ matrix.goarch }} .
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          go build -ldflags "-X main.version=${VERSION}" -o git-lint-${{ matrix.goos }}-${{ matrix.goarch }} .
 
       - name: Generate checksum
         run: sha256sum git-lint-${{ matrix.goos }}-${{ matrix.goarch }} > git-lint-${{ matrix.goos }}-${{ matrix.goarch }}.sha256

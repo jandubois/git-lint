@@ -19,6 +19,9 @@ const (
 	ansiCyan   = "\033[36m"
 )
 
+// version is set at build time via -ldflags "-X main.version=..."
+var version = "dev"
+
 var isTTY bool
 
 func init() {
@@ -36,7 +39,13 @@ func main() {
 	flag.BoolVar(&recursive, "recursive", false, "check each git repo in subdirectories")
 	verbose := flag.Bool("verbose", false, "show all checks and all detail lines")
 	quiet := flag.Bool("quiet", false, "suppress detail lines")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Println("git-lint version " + version)
+		return
+	}
 
 	if *dir != "" {
 		if err := os.Chdir(*dir); err != nil {
