@@ -21,27 +21,26 @@ func (c *ProtocolCheck) Check(repo *Repo) []Result {
 	var results []Result
 	for _, name := range remotes {
 		url := repo.RemoteURL(name)
+		if owner, _ := parseGitHubRepo(url); owner == "" {
+			continue
+		}
 		got := urlProtocol(url)
 		if got == want {
 			continue
 		}
-		r := Result{
+		results = append(results, Result{
 			Name:    fmt.Sprintf("remote/protocol[%s]", name),
-			Status:  StatusWarn,
+			Status:  StatusFail,
 			Message: fmt.Sprintf("uses %s, want %s (%s)", got, want, url),
-		}
-		if converted := convertGitHubURL(url, want); converted != "" {
-			r.Status = StatusFail
-			r.Fixable = true
-		}
-		results = append(results, r)
+			Fixable: true,
+		})
 	}
 
 	if len(results) == 0 {
 		return []Result{{
 			Name:    "remote/protocol",
 			Status:  StatusOK,
-			Message: fmt.Sprintf("all remotes use %s", want),
+			Message: fmt.Sprintf("all GitHub remotes use %s", want),
 		}}
 	}
 	return results

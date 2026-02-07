@@ -77,11 +77,11 @@ Create `~/.config/git-lint/config.json` (or `$XDG_CONFIG_HOME/git-lint/config.js
 
 A repo is **work** if any remote URL contains a configured work org (e.g. `github.com/acme/`) or if `user.email` matches the configured work email. All other repos are **personal**.
 
-### Remote protocol (all repos, when `protocol` is set)
+### Remote protocol (GitHub remotes, when `protocol` is set)
 
 | Check | Fix |
 |-------|-----|
-| All remotes use configured protocol (`ssh` or `https`) | `git remote set-url` (GitHub only) |
+| GitHub remotes use configured protocol (`ssh` or `https`) | `git remote set-url` |
 
 ### Identity (all repos)
 
