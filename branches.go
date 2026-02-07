@@ -146,13 +146,15 @@ func stalePRCheckout(repo *Repo, branch, shortHash, author, mainBranch string) s
 // mergedBranches returns names of local branches fully merged into main.
 // Checks both the local main branch and its upstream (if any) so that
 // branches merged locally but not yet pushed are still detected.
+// Uses for-each-ref instead of branch --merged to avoid an expensive
+// reachability check against detached HEAD on large repos.
 func mergedBranches(repo *Repo, mainBranch string) map[string]bool {
 	if mainBranch == "" {
 		return nil
 	}
 	m := make(map[string]bool)
 	for _, ref := range []string{mainBranch + "@{upstream}", mainBranch} {
-		out, err := repo.Git("branch", "--merged", ref, "--format=%(refname:short)")
+		out, err := repo.Git("for-each-ref", "--merged", ref, "--format=%(refname:short)", "refs/heads/")
 		if err != nil || out == "" {
 			continue
 		}
