@@ -11,6 +11,17 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: darwin
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: linux
+            goarch: amd64
     steps:
       - uses: actions/checkout@v4
 
@@ -20,13 +31,30 @@ jobs:
 
       - name: Build binary
         env:
-          GOOS: darwin
-          GOARCH: arm64
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
-        run: go build -o git-lint-darwin-arm64 .
+        run: go build -o git-lint-${{ matrix.goos }}-${{ matrix.goarch }} .
 
       - name: Generate checksum
-        run: sha256sum git-lint-darwin-arm64 > git-lint-darwin-arm64.sha256
+        run: sha256sum git-lint-${{ matrix.goos }}-${{ matrix.goarch }} > git-lint-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: git-lint-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            git-lint-${{ matrix.goos }}-${{ matrix.goarch }}
+            git-lint-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
 
       - name: Get tag annotation
         id: tag
@@ -40,6 +68,5 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            git-lint-darwin-arm64
-            git-lint-darwin-arm64.sha256
+            git-lint-*
           body: ${{ steps.tag.outputs.body }}
