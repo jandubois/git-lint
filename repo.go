@@ -20,15 +20,16 @@ func NewRepo(dir string, cfg *Config) (*Repo, error) {
 }
 
 func (r *Repo) classify() error {
-	urls, err := r.Git("remote", "-v")
+	remotes, err := r.Remotes()
 	if err != nil {
 		return err
 	}
-	for _, line := range strings.Split(urls, "\n") {
+	for _, name := range remotes {
+		url := r.RemoteURL(name)
 		for _, org := range r.Config.WorkOrgs {
 			// Match github.com/org/ in any remote URL (both HTTPS and SSH).
-			if strings.Contains(line, "github.com/"+org+"/") ||
-				strings.Contains(line, "github.com:"+org+"/") {
+			if strings.Contains(url, "github.com/"+org+"/") ||
+				strings.Contains(url, "github.com:"+org+"/") {
 				r.Work = true
 				return nil
 			}
@@ -36,7 +37,8 @@ func (r *Repo) classify() error {
 	}
 
 	// A repo using the work email is also treated as a work repo.
-	email := r.GitConfig("user.email")
+	// Use effective config: a globally-set work email still means work.
+	email := r.GitConfigEffective("user.email")
 	if email != "" && email == r.Config.Identity.WorkEmail {
 		r.Work = true
 	}
@@ -52,8 +54,15 @@ func (r *Repo) Git(args ...string) (string, error) {
 	return strings.TrimRight(string(out), "\n"), err
 }
 
-// GitConfig reads a single git config value. Returns "" if unset.
+// GitConfig reads a single local git config value from .git/config.
+// Returns "" if unset. Ignores global, system, and environment config.
 func (r *Repo) GitConfig(key string) string {
+	val, _ := r.Git("config", "--local", "--get", key)
+	return val
+}
+
+// GitConfigEffective reads the effective git config value from all sources.
+func (r *Repo) GitConfigEffective(key string) string {
 	val, _ := r.Git("config", "--get", key)
 	return val
 }
@@ -82,10 +91,10 @@ func (r *Repo) Remotes() ([]string, error) {
 	return strings.Split(out, "\n"), nil
 }
 
-// RemoteURL returns the fetch URL for a remote.
+// RemoteURL returns the fetch URL for a remote as stored in .git/config,
+// bypassing insteadOf rewriting and environment overrides.
 func (r *Repo) RemoteURL(name string) string {
-	url, _ := r.Git("remote", "get-url", name)
-	return url
+	return r.GitConfig("remote." + name + ".url")
 }
 
 // MainBranch returns the name of the main branch ("main" or "master").

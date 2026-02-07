@@ -7,62 +7,64 @@ type IdentityCheck struct{}
 func (c *IdentityCheck) Check(repo *Repo) []Result {
 	var results []Result
 
-	// Rule 1: user.name
-	name := repo.GitConfig("user.name")
+	// user.name: check effective value; fix sets it locally.
+	name := repo.GitConfigEffective("user.name")
 	want := repo.Config.Identity.Name
 	if name == want {
 		results = append(results, Result{
-			Name:   "identity/name",
-			Status: StatusOK,
+			Name:    "identity/name",
+			Status:  StatusOK,
 			Message: name,
 		})
 	} else {
-		msg := fmt.Sprintf("got %q, want %q", name, want)
 		results = append(results, Result{
 			Name:    "identity/name",
 			Status:  StatusFail,
-			Message: msg,
+			Message: fmt.Sprintf("got %q, want %q", name, want),
 			Fixable: true,
 		})
 	}
 
 	// Email rules:
-	//   - Work repos must use work email.
-	//   - Personal repos accept either work or personal email.
-	//   - Any other email always fails.
-	email := repo.GitConfig("user.email")
+	//   - Work repos require the work email set in local config.
+	//   - Personal repos accept either configured email from any source.
 	workEmail := repo.Config.Identity.WorkEmail
 	personalEmail := repo.Config.Identity.PersonalEmail
-	isWork := email == workEmail
-	isPersonal := email == personalEmail
 
-	switch {
-	case repo.Work && isWork:
-		results = append(results, Result{
-			Name:    "identity/email",
-			Status:  StatusOK,
-			Message: email,
-		})
-	case repo.Work && !isWork:
-		results = append(results, Result{
-			Name:    "identity/email",
-			Status:  StatusFail,
-			Message: fmt.Sprintf("got %q, want %q", email, workEmail),
-			Fixable: true,
-		})
-	case !repo.Work && (isWork || isPersonal):
-		results = append(results, Result{
-			Name:    "identity/email",
-			Status:  StatusOK,
-			Message: email,
-		})
-	default:
-		results = append(results, Result{
-			Name:    "identity/email",
-			Status:  StatusFail,
-			Message: fmt.Sprintf("got %q, want %q or %q", email, workEmail, personalEmail),
-			Fixable: true,
-		})
+	if repo.Work {
+		// Work repos: require work email in local .git/config.
+		localEmail := repo.GitConfig("user.email")
+		if localEmail == workEmail {
+			results = append(results, Result{
+				Name:    "identity/email",
+				Status:  StatusOK,
+				Message: localEmail,
+			})
+		} else {
+			results = append(results, Result{
+				Name:    "identity/email",
+				Status:  StatusFail,
+				Message: fmt.Sprintf("got %q, want %q", localEmail, workEmail),
+				Fixable: true,
+			})
+		}
+	} else {
+		// Personal repos: effective value from any config source suffices.
+		email := repo.GitConfigEffective("user.email")
+		if email == workEmail || email == personalEmail {
+			results = append(results, Result{
+				Name:    "identity/email",
+				Status:  StatusOK,
+				Message: email,
+			})
+		} else {
+			results = append(results, Result{
+				Name:    "identity/email",
+				Status:  StatusFail,
+				Message: fmt.Sprintf("got %q, want %q or %q", email, workEmail, personalEmail),
+				Fixable: true,
+			})
+		}
 	}
 
 	return results
