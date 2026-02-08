@@ -1,9 +1,12 @@
 package main
 
 import (
+	"errors"
 	"os/exec"
 	"strings"
 )
+
+var errNotARepo = errors.New("not a git repository")
 
 type Repo struct {
 	Dir    string
@@ -13,6 +16,9 @@ type Repo struct {
 
 func NewRepo(dir string, cfg *Config) (*Repo, error) {
 	r := &Repo{Dir: dir, Config: cfg}
+	if _, err := r.Git("rev-parse", "--git-dir"); err != nil {
+		return nil, errNotARepo
+	}
 	if err := r.classify(); err != nil {
 		return nil, err
 	}

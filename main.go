@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -173,6 +174,9 @@ func runChecks(dir string, opts lintOptions) ([]Result, int) {
 	repo, err := NewRepo(dir, opts.cfg)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		if errors.Is(err, errNotARepo) {
+			fmt.Fprintf(os.Stderr, "hint: use -R to check each git repo in subdirectories\n")
+		}
 		return nil, 2
 	}
 
