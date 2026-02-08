@@ -32,7 +32,7 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 		if len(oldDetails) > 0 {
 			results = append(results, Result{
 				Name:    "staleness/stash-age",
-				Status:  StatusWarn,
+				Status:  StatusFail,
 				Message: fmt.Sprintf("%d stash entries older than %s", len(oldDetails), formatDuration(maxAge)),
 				Details: oldDetails,
 			})
@@ -52,7 +52,7 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 			}
 			results = append(results, Result{
 				Name:    "staleness/stash-count",
-				Status:  StatusWarn,
+				Status:  StatusFail,
 				Message: fmt.Sprintf("%d entries (max %d)", len(entries), maxCount),
 				Details: allDetails,
 			})
@@ -87,7 +87,7 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 		if stale {
 			results = append(results, Result{
 				Name:    "staleness/uncommitted",
-				Status:  StatusWarn,
+				Status:  StatusFail,
 				Message: fmt.Sprintf("uncommitted changes for %s (max %s)", formatDuration(age), formatDuration(maxUncommitted)),
 				Details: uncommittedLines,
 			})
@@ -104,7 +104,7 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 		if stale {
 			results = append(results, Result{
 				Name:    "staleness/untracked",
-				Status:  StatusWarn,
+				Status:  StatusFail,
 				Message: fmt.Sprintf("%d untracked files for %s (max %s)", len(untrackedLines), formatDuration(age), formatDuration(maxUncommitted)),
 				Details: untrackedLines,
 			})
@@ -129,7 +129,7 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 }
 
 func (c *StalenessCheck) Fix(_ *Repo, results []Result) []Result {
-	// Staleness checks are warn-only; nothing to fix.
+	// Staleness checks have no automated fix.
 	return results
 }
 

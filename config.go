@@ -49,6 +49,22 @@ func (d *Duration) UnmarshalJSON(b []byte) error {
 	return nil
 }
 
+func (d Duration) MarshalJSON() ([]byte, error) {
+	return json.Marshal(formatDurationConfig(d.Duration))
+}
+
+// formatDurationConfig formats a duration for config display, using days where appropriate.
+func formatDurationConfig(d time.Duration) string {
+	if d == 0 {
+		return "0s"
+	}
+	hours := int(d.Hours())
+	if hours > 0 && hours%24 == 0 {
+		return fmt.Sprintf("%dd", hours/24)
+	}
+	return d.String()
+}
+
 func parseDuration(s string) (time.Duration, error) {
 	// Support "Nd" for days, otherwise delegate to time.ParseDuration.
 	if strings.HasSuffix(s, "d") {
@@ -73,6 +89,9 @@ func loadConfig() (*Config, error) {
 	path := configPath()
 	data, err := os.ReadFile(path)
 	if err != nil {
+		if os.IsNotExist(err) {
+			return &Config{}, nil
+		}
 		return nil, fmt.Errorf("reading config %s: %w", path, err)
 	}
 	var cfg Config

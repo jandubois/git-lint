@@ -73,7 +73,7 @@ func (c *UnpushedCheck) Check(repo *Repo) []Result {
 			}
 			results = append(results, Result{
 				Name:    fmt.Sprintf("staleness/unpushed[%s]", branch),
-				Status:  StatusWarn,
+				Status:  StatusFail,
 				Message: msg,
 				Details: details,
 			})

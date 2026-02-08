@@ -41,10 +41,48 @@ func main() {
 	verbose := flag.Bool("verbose", false, "show all checks and all detail lines")
 	quiet := flag.Bool("quiet", false, "suppress detail lines")
 	showVersion := flag.Bool("version", false, "print version and exit")
+
+	// Probe mode flags
+	path := flag.String("path", "", "root directory to check (probe mode)")
+	describe := flag.Bool("describe", false, "output probe description as JSON")
+
+	// Config override flags
+	workOrgs := flag.String("work-orgs", "", "comma-separated list of GitHub work organizations")
+	protocol := flag.String("protocol", "", "preferred git protocol (ssh or https)")
+	identityName := flag.String("identity-name", "", "expected git user name")
+	workEmail := flag.String("work-email", "", "expected work email address")
+	personalEmail := flag.String("personal-email", "", "expected personal email address")
+	stashMaxAge := flag.String("stash-max-age", "", "max stash entry age (e.g. 7d, 12h)")
+	stashMaxCount := flag.Int("stash-max-count", 0, "max number of stash entries")
+	uncommittedMaxAge := flag.String("uncommitted-max-age", "", "max age for uncommitted changes (e.g. 1d)")
+	unpushedMaxAge := flag.String("unpushed-max-age", "", "max age for unpushed commits (e.g. 7d)")
+
 	flag.Parse()
 
 	if *showVersion {
 		fmt.Println("git-lint version " + version)
+		return
+	}
+
+	cfg, err := loadConfig()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(2)
+	}
+
+	applyFlags(cfg,
+		*workOrgs, *protocol,
+		*identityName, *workEmail, *personalEmail,
+		*stashMaxAge, *stashMaxCount, *uncommittedMaxAge, *unpushedMaxAge,
+	)
+
+	if *describe {
+		probeDescribe(cfg)
+		return
+	}
+
+	if *path != "" {
+		os.Exit(probeRun(*path, cfg))
 		return
 	}
 
@@ -53,12 +91,6 @@ func main() {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(2)
 		}
-	}
-
-	cfg, err := loadConfig()
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(2)
 	}
 
 	if *clone != "" {
@@ -86,6 +118,46 @@ func main() {
 		os.Exit(2)
 	}
 	os.Exit(lintRepo(wd, opts))
+}
+
+func applyFlags(cfg *Config,
+	workOrgs, protocol string,
+	identityName, workEmail, personalEmail string,
+	stashMaxAge string, stashMaxCount int, uncommittedMaxAge, unpushedMaxAge string,
+) {
+	if workOrgs != "" {
+		cfg.WorkOrgs = strings.Split(workOrgs, ",")
+	}
+	if protocol != "" {
+		cfg.Protocol = protocol
+	}
+	if identityName != "" {
+		cfg.Identity.Name = identityName
+	}
+	if workEmail != "" {
+		cfg.Identity.WorkEmail = workEmail
+	}
+	if personalEmail != "" {
+		cfg.Identity.PersonalEmail = personalEmail
+	}
+	if stashMaxAge != "" {
+		if d, err := parseDuration(stashMaxAge); err == nil {
+			cfg.Thresholds.StashMaxAge = Duration{d}
+		}
+	}
+	if stashMaxCount > 0 {
+		cfg.Thresholds.StashMaxCount = stashMaxCount
+	}
+	if uncommittedMaxAge != "" {
+		if d, err := parseDuration(uncommittedMaxAge); err == nil {
+			cfg.Thresholds.UncommittedMaxAge = Duration{d}
+		}
+	}
+	if unpushedMaxAge != "" {
+		if d, err := parseDuration(unpushedMaxAge); err == nil {
+			cfg.Thresholds.UnpushedMaxAge = Duration{d}
+		}
+	}
 }
 
 type lintOptions struct {
