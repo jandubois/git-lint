@@ -51,6 +51,32 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 		}
 	}
 
+	// upstream remote pushurl should be DISABLED.
+	if hasRemote(remotes, "upstream") {
+		pushURL := repo.GitConfig("remote.upstream.pushurl")
+		switch {
+		case pushURL == "DISABLED":
+			results = append(results, Result{
+				Name:    "remote/push-url",
+				Status:  StatusOK,
+				Message: "upstream pushurl is DISABLED",
+			})
+		case pushURL == "":
+			results = append(results, Result{
+				Name:    "remote/push-url",
+				Status:  StatusFail,
+				Message: "upstream has no pushurl",
+				Fixable: true,
+			})
+		default:
+			results = append(results, Result{
+				Name:    "remote/push-url",
+				Status:  StatusWarn,
+				Message: fmt.Sprintf("upstream pushurl is %q, expected DISABLED", pushURL),
+			})
+		}
+	}
+
 	if !repo.Work {
 		return results
 	}
@@ -99,19 +125,19 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 			})
 		}
 
-		// Rule 6: main/master pushRemote = no_push.
+		// Rule 6: main/master pushRemote = DISABLED.
 		pushRemote := repo.GitConfig(fmt.Sprintf("branch.%s.pushRemote", mainBranch))
-		if pushRemote == "no_push" {
+		if pushRemote == "DISABLED" {
 			results = append(results, Result{
 				Name:    "remote/push-guard",
 				Status:  StatusOK,
-				Message: fmt.Sprintf("%s pushRemote is no_push", mainBranch),
+				Message: fmt.Sprintf("%s pushRemote is DISABLED", mainBranch),
 			})
 		} else {
 			results = append(results, Result{
 				Name:    "remote/push-guard",
 				Status:  StatusFail,
-				Message: fmt.Sprintf("%s pushRemote is %q, should be no_push", mainBranch, pushRemote),
+				Message: fmt.Sprintf("%s pushRemote is %q, should be DISABLED", mainBranch, pushRemote),
 				Fixable: true,
 			})
 		}
@@ -152,13 +178,24 @@ func (c *RemoteCheck) Fix(repo *Repo, results []Result) []Result {
 
 		case r.Name == "remote/push-guard" && mainBranch != "":
 			key := fmt.Sprintf("branch.%s.pushRemote", mainBranch)
-			if err := repo.SetGitConfig(key, "no_push"); err != nil {
+			if err := repo.SetGitConfig(key, "DISABLED"); err != nil {
 				fixed = append(fixed, r)
 			} else {
 				fixed = append(fixed, Result{
 					Name:    r.Name,
 					Status:  StatusFix,
-					Message: fmt.Sprintf("set %s pushRemote to no_push", mainBranch),
+					Message: fmt.Sprintf("set %s pushRemote to DISABLED", mainBranch),
+				})
+			}
+
+		case r.Name == "remote/push-url":
+			if err := repo.SetGitConfig("remote.upstream.pushurl", "DISABLED"); err != nil {
+				fixed = append(fixed, r)
+			} else {
+				fixed = append(fixed, Result{
+					Name:    r.Name,
+					Status:  StatusFix,
+					Message: "set upstream pushurl to DISABLED",
 				})
 			}
 
@@ -203,6 +240,16 @@ func (c *RemoteCheck) Fix(repo *Repo, results []Result) []Result {
 		}
 	}
 	return fixed
+}
+
+// hasRemote reports whether name appears in the remotes list.
+func hasRemote(remotes []string, name string) bool {
+	for _, r := range remotes {
+		if r == name {
+			return true
+		}
+	}
+	return false
 }
 
 // workOrgInURL returns the work org name found in the URL, or "".
