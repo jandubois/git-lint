@@ -258,6 +258,7 @@ func runChecks(dir string, opts lintOptions) ([]Result, int) {
 		&ForkSetupCheck{},
 		&RemoteCheck{},
 		&AttributionCheck{},
+		&DependabotCheck{},
 		&StalenessCheck{},
 		&SubmoduleCheck{},
 		&BranchCleanupCheck{},
