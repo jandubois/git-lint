@@ -107,6 +107,12 @@ For repos where `origin` is a GitHub fork, git-lint queries the fork parent via 
 | `gh-resolved = base` on fork parent remote | set gh-resolved |
 | No stale `gh-resolved` on other remotes | unset gh-resolved |
 
+### Branch tracking (all repos with multiple remotes)
+
+| Check | Fix |
+|-------|-----|
+| Non-default branches track origin | warn only |
+
 ### Remote structure (work repos with multiple remotes)
 
 | Check | Fix |

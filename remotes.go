@@ -170,6 +170,28 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 		}
 	}
 
+	// mainBranch is used by the branch-tracking check below and the
+	// work-repo tracking/push-guard checks further down.
+	mainBranch := repo.MainBranch()
+
+	// Non-default branches should track origin, not upstream.
+	branchOut, err := repo.Git("for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	if err == nil && branchOut != "" {
+		for _, branch := range strings.Split(branchOut, "\n") {
+			if branch == mainBranch {
+				continue
+			}
+			remote := repo.GitConfig(fmt.Sprintf("branch.%s.remote", branch))
+			if remote != "" && remote != "origin" {
+				results = append(results, Result{
+					Name:    fmt.Sprintf("remote/branch-tracking[%s]", branch),
+					Status:  StatusWarn,
+					Message: fmt.Sprintf("tracks %s, not origin", remote),
+				})
+			}
+		}
+	}
+
 	if !repo.Work {
 		return results
 	}
@@ -191,7 +213,6 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 	}
 
 	// Rules 5-6 require a main branch.
-	mainBranch := repo.MainBranch()
 	if mainBranch != "" {
 		// Rule 5: main/master should track a non-origin remote.
 		upstream := repo.GitConfig(fmt.Sprintf("branch.%s.remote", mainBranch))
