@@ -5,6 +5,99 @@ import (
 	"strings"
 )
 
+// ForkSetupCheck detects repos where origin points to someone else's GitHub
+// repo and the authenticated user owns a fork. The fix renames origin to
+// upstream and adds the user's fork as origin, so subsequent checks operate
+// on the correct remote layout.
+type ForkSetupCheck struct{}
+
+func (c *ForkSetupCheck) Check(repo *Repo) []Result {
+	remotes, _ := repo.Remotes()
+	if hasRemote(remotes, "upstream") {
+		return nil
+	}
+
+	originURL := repo.RemoteURL("origin")
+	owner, repoName := parseGitHubRepo(originURL)
+	if owner == "" {
+		return nil
+	}
+
+	me, err := ghUser()
+	if err != nil {
+		return nil
+	}
+	if strings.EqualFold(owner, me) {
+		return nil
+	}
+
+	if !ghHasFork(me, owner, repoName) {
+		return nil
+	}
+
+	return []Result{{
+		Name:    "remote/fork-setup",
+		Status:  StatusFail,
+		Message: fmt.Sprintf("origin is %s/%s but you own a fork", owner, repoName),
+		Fixable: true,
+	}}
+}
+
+func (c *ForkSetupCheck) Fix(repo *Repo, results []Result) []Result {
+	var fixed []Result
+	for _, r := range results {
+		if r.Status != StatusFail || !r.Fixable || r.Name != "remote/fork-setup" {
+			fixed = append(fixed, r)
+			continue
+		}
+
+		originURL := repo.RemoteURL("origin")
+		_, repoName := parseGitHubRepo(originURL)
+		if repoName == "" {
+			fixed = append(fixed, r)
+			continue
+		}
+
+		me, err := ghUser()
+		if err != nil {
+			fixed = append(fixed, r)
+			continue
+		}
+
+		protocol := repo.Config.Protocol
+		if protocol == "" {
+			if strings.HasPrefix(originURL, "git@") {
+				protocol = "ssh"
+			} else {
+				protocol = "https"
+			}
+		}
+
+		if _, err := repo.Git("remote", "rename", "origin", "upstream"); err != nil {
+			fixed = append(fixed, r)
+			continue
+		}
+
+		// The rename moves remote.origin.* config to remote.upstream.*.
+		// Clear the stale fork-parent cache from the renamed remote.
+		repo.UnsetGitConfig("remote.upstream.gh-parent")
+
+		forkURL := githubCloneURL(me, repoName, protocol)
+		if _, err := repo.Git("remote", "add", "origin", forkURL); err != nil {
+			repo.Git("remote", "rename", "upstream", "origin")
+			fixed = append(fixed, r)
+			continue
+		}
+
+		fixed = append(fixed, Result{
+			Name:    r.Name,
+			Status:  StatusFix,
+			Message: fmt.Sprintf("renamed origin to upstream, added fork %s/%s as origin", me, repoName),
+		})
+	}
+	return fixed
+}
+
 type RemoteCheck struct{}
 
 func (c *RemoteCheck) Check(repo *Repo) []Result {

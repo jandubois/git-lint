@@ -255,6 +255,7 @@ func runChecks(dir string, opts lintOptions) ([]Result, int) {
 	checks := []Check{
 		&IdentityCheck{},
 		&ProtocolCheck{},
+		&ForkSetupCheck{},
 		&RemoteCheck{},
 		&AttributionCheck{},
 		&StalenessCheck{},

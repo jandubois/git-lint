@@ -90,6 +90,14 @@ A repo is **work** if any remote URL contains a configured work org (e.g. `githu
 | `user.name` matches configured name | `git config user.name` |
 | `user.email` matches work email (work repos) or either configured email (personal repos) | `git config user.email` |
 
+### Fork adoption (repos without upstream remote)
+
+When origin points to someone else's GitHub repo and you own a fork with the same name, git-lint renames origin to upstream and adds your fork as origin. Subsequent checks then configure the corrected remote layout.
+
+| Check | Fix |
+|-------|-----|
+| Origin belongs to another user; you own a fork | rename origin to upstream, add fork as origin |
+
 ### Fork parent resolution (all repos with multiple remotes)
 
 For repos where `origin` is a GitHub fork, git-lint queries the fork parent via `gh api` and caches the result in `remote.origin.gh-parent`. This avoids repeated API calls and degrades gracefully when `gh` is unavailable or the network is down.
