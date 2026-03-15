@@ -117,7 +117,7 @@ For repos where `origin` is a GitHub fork, git-lint queries the fork parent via 
 
 | Check | Fix |
 |-------|-----|
-| `CLAUDE.md` and `.claude/` in `.git/info/exclude` | append to exclude file |
+| `CLAUDE.md`, `AGENTS.md`, and `.claude/` in `.git/info/exclude` | append to exclude file |
 
 ### Staleness (all repos)
 

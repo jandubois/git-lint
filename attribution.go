@@ -107,7 +107,7 @@ func (c *AttributionCheck) checkAttribution(data []byte) []Result {
 }
 
 // Patterns that should be in .git/info/exclude for shared repos.
-var claudeExcludePatterns = []string{"CLAUDE.md", ".claude/"}
+var claudeExcludePatterns = []string{"CLAUDE.md", "AGENTS.md", ".claude/"}
 
 func (c *AttributionCheck) checkExclude(repo *Repo) []Result {
 	excludePath := filepath.Join(repo.Dir, ".git", "info", "exclude")
