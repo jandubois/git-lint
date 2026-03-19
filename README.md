@@ -112,6 +112,7 @@ For repos where `origin` is a GitHub fork, git-lint queries the fork parent via 
 | Check | Fix |
 |-------|-----|
 | Non-default branches track origin | warn only |
+| `reviews` branch tracks `origin`, or `upstream` if upstream repo is private | set tracking branch |
 
 ### Remote structure (work repos with multiple remotes)
 

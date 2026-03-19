@@ -176,9 +176,10 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 
 	// Non-default branches should track origin, not upstream.
 	branchOut, err := repo.Git("for-each-ref", "--format=%(refname:short)", "refs/heads/")
+	hasUpstream := hasRemote(remotes, "upstream")
 	if err == nil && branchOut != "" {
 		for _, branch := range strings.Split(branchOut, "\n") {
-			if branch == mainBranch {
+			if branch == mainBranch || (branch == "reviews" && hasUpstream) {
 				continue
 			}
 			remote := repo.GitConfig(fmt.Sprintf("branch.%s.remote", branch))
@@ -189,6 +190,26 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 					Message: fmt.Sprintf("tracks %s, not origin", remote),
 				})
 			}
+		}
+	}
+
+	// reviews branch should track origin, or upstream if the upstream repo is private.
+	if hasUpstream && branchExists(branchOut, "reviews") {
+		remote := repo.GitConfig("branch.reviews.remote")
+		expected := reviewsExpectedRemote(repo)
+		if remote == expected {
+			results = append(results, Result{
+				Name:    "remote/reviews-tracking",
+				Status:  StatusOK,
+				Message: fmt.Sprintf("reviews tracks %s", remote),
+			})
+		} else {
+			results = append(results, Result{
+				Name:    "remote/reviews-tracking",
+				Status:  StatusFail,
+				Message: fmt.Sprintf("reviews tracks %q, should track %s", remote, expected),
+				Fixable: true,
+			})
 		}
 	}
 
@@ -336,6 +357,20 @@ func (c *RemoteCheck) Fix(repo *Repo, results []Result) []Result {
 				})
 			}
 
+		case r.Name == "remote/reviews-tracking":
+			expected := reviewsExpectedRemote(repo)
+			err1 := repo.SetGitConfig("branch.reviews.remote", expected)
+			err2 := repo.SetGitConfig("branch.reviews.merge", "refs/heads/reviews")
+			if err1 != nil || err2 != nil {
+				fixed = append(fixed, r)
+			} else {
+				fixed = append(fixed, Result{
+					Name:    r.Name,
+					Status:  StatusFix,
+					Message: fmt.Sprintf("set reviews to track %s/reviews", expected),
+				})
+			}
+
 		case strings.HasPrefix(r.Name, "remote/gh-resolved["):
 			name := r.Name[len("remote/gh-resolved[") : len(r.Name)-1]
 			key := fmt.Sprintf("remote.%s.gh-resolved", name)
@@ -393,4 +428,26 @@ func upstreamFor(repo *Repo, remotes []string) string {
 		}
 	}
 	return ""
+}
+
+// branchExists reports whether name appears in the for-each-ref output.
+func branchExists(branchOut, name string) bool {
+	for _, b := range strings.Split(branchOut, "\n") {
+		if b == name {
+			return true
+		}
+	}
+	return false
+}
+
+// reviewsExpectedRemote returns which remote the reviews branch should track.
+// Returns "upstream" if the upstream repo is private, "origin" otherwise.
+func reviewsExpectedRemote(repo *Repo) string {
+	owner, repoName := parseGitHubRepo(repo.RemoteURL("upstream"))
+	if owner != "" {
+		if private, ok := ghRepoPrivate(owner, repoName); ok && private {
+			return "upstream"
+		}
+	}
+	return "origin"
 }

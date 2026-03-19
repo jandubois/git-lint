@@ -39,6 +39,29 @@ func ghForkParent(owner, repo string) (parent string, ok bool) {
 	return strings.TrimSpace(string(out)), true
 }
 
+// ghPRState returns the state of a pull request: "merged", "closed", or "open".
+// Returns ("", false) on any error.
+func ghPRState(owner, repo, number string) (string, bool) {
+	out, err := exec.Command("gh", "api",
+		"repos/"+owner+"/"+repo+"/pulls/"+number,
+		"--jq", `if .merged then "merged" else .state end`).Output()
+	if err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(string(out)), true
+}
+
+// ghRepoPrivate queries the GitHub API to check if owner/repo is private.
+// Returns (private, true) on success, or (false, false) on any error.
+func ghRepoPrivate(owner, repo string) (private bool, ok bool) {
+	cmd := exec.Command("gh", "api", "repos/"+owner+"/"+repo, "--jq", `.private`)
+	out, err := cmd.Output()
+	if err != nil {
+		return false, false
+	}
+	return strings.TrimSpace(string(out)) == "true", true
+}
+
 // ForkParent returns the "owner/repo" of origin's fork parent on GitHub.
 // Caches the result in remote.origin.gh-parent to avoid repeated API calls.
 // Returns "" if origin is not a GitHub fork or if the lookup fails transiently.
