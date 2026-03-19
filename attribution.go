@@ -107,14 +107,14 @@ func (c *AttributionCheck) checkAttribution(data []byte) []Result {
 }
 
 // Patterns that should be in .git/info/exclude for shared repos.
-var claudeExcludePatterns = []string{"CLAUDE.md", "AGENTS.md", ".claude/"}
+var localExcludes = []string{"CLAUDE.md", "AGENTS.md", ".claude/", ".reviews/"}
 
 func (c *AttributionCheck) checkExclude(repo *Repo) []Result {
 	excludePath := filepath.Join(repo.Dir, ".git", "info", "exclude")
 	existing := readLines(excludePath)
 
 	var missing []string
-	for _, pattern := range claudeExcludePatterns {
+	for _, pattern := range localExcludes {
 		if !containsLine(existing, pattern) {
 			missing = append(missing, pattern)
 		}
@@ -122,16 +122,16 @@ func (c *AttributionCheck) checkExclude(repo *Repo) []Result {
 
 	if len(missing) > 0 {
 		return []Result{{
-			Name:    "claude/exclude",
+			Name:    "local/exclude",
 			Status:  StatusFail,
 			Message: fmt.Sprintf(".git/info/exclude missing: %s", strings.Join(missing, ", ")),
 			Fixable: true,
 		}}
 	}
 	return []Result{{
-		Name:    "claude/exclude",
+		Name:    "local/exclude",
 		Status:  StatusOK,
-		Message: "claude files excluded",
+		Message: "local excludes present",
 	}}
 }
 
@@ -155,7 +155,7 @@ func (c *AttributionCheck) Fix(repo *Repo, results []Result) []Result {
 					Message: fmt.Sprintf("set empty attribution in %s", settingsRelPath),
 				})
 			}
-		case r.Name == "claude/exclude":
+		case r.Name == "local/exclude":
 			excludePath := filepath.Join(repo.Dir, ".git", "info", "exclude")
 			if err := ensureExcludePatterns(excludePath); err != nil {
 				fixed = append(fixed, r)
@@ -163,7 +163,7 @@ func (c *AttributionCheck) Fix(repo *Repo, results []Result) []Result {
 				fixed = append(fixed, Result{
 					Name:    r.Name,
 					Status:  StatusFix,
-					Message: "added claude patterns to .git/info/exclude",
+					Message: "added patterns to .git/info/exclude",
 				})
 			}
 		default:
@@ -173,12 +173,12 @@ func (c *AttributionCheck) Fix(repo *Repo, results []Result) []Result {
 	return fixed
 }
 
-// ensureExcludePatterns appends missing claude patterns to the exclude file.
+// ensureExcludePatterns appends missing patterns to the exclude file.
 func ensureExcludePatterns(path string) error {
 	existing := readLines(path)
 
 	var toAdd []string
-	for _, pattern := range claudeExcludePatterns {
+	for _, pattern := range localExcludes {
 		if !containsLine(existing, pattern) {
 			toAdd = append(toAdd, pattern)
 		}

@@ -127,11 +127,11 @@ For repos where `origin` is a GitHub fork, git-lint queries the fork parent via 
 |-------|-----|
 | `.claude/settings.local.json` has empty attribution | create/update file |
 
-### Claude file exclusion (work repos and repos with multiple remotes)
+### Local excludes (work repos and repos with multiple remotes)
 
 | Check | Fix |
 |-------|-----|
-| `CLAUDE.md`, `AGENTS.md`, and `.claude/` in `.git/info/exclude` | append to exclude file |
+| `CLAUDE.md`, `AGENTS.md`, `.claude/`, and `.reviews/` in `.git/info/exclude` | append to exclude file |
 
 ### Staleness (all repos)
 
