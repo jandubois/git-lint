@@ -102,8 +102,8 @@ func (c *BranchCleanupCheck) Fix(repo *Repo, results []Result) []Result {
 }
 
 // stalePRCheckout returns a non-empty reason if branch tracks a refs/pull/
-// ref and is stale: either the branch is already merged into main, or the
-// local commit no longer matches the remote PR head.
+// ref and is stale: the branch is merged into main, the local commit no
+// longer matches the remote PR head, or the PR is merged or closed on GitHub.
 func stalePRCheckout(repo *Repo, branch, shortHash, author, mainBranch string) string {
 	mergeRef, _ := repo.Git("config", fmt.Sprintf("branch.%s.merge", branch))
 	if !strings.HasPrefix(mergeRef, "refs/pull/") {
@@ -138,6 +138,19 @@ func stalePRCheckout(repo *Repo, branch, shortHash, author, mainBranch string) s
 	remoteHash := strings.Fields(lsOut)[0]
 	if !strings.HasPrefix(remoteHash, shortHash) {
 		return fmt.Sprintf("PR #%s updated since checkout %s", pr, detail)
+	}
+
+	// Condition 3: PR is merged or closed on GitHub.
+	// Catches squash-merges where the original commits are not ancestors of
+	// main and the PR ref still matches the local tip.
+	owner, repoName := parseGitHubRepo(repo.RemoteURL(remote))
+	if owner != "" {
+		switch state, _ := ghPRState(owner, repoName, pr); state {
+		case "merged":
+			return fmt.Sprintf("PR #%s merged %s", pr, detail)
+		case "closed":
+			return fmt.Sprintf("PR #%s closed %s", pr, detail)
+		}
 	}
 
 	return ""
