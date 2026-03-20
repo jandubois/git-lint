@@ -259,6 +259,7 @@ func runChecks(dir string, opts lintOptions) ([]Result, int) {
 		&RemoteCheck{},
 		&AttributionCheck{},
 		&DependabotCheck{},
+		&ReviewsCheck{},
 		&StalenessCheck{},
 		&SubmoduleCheck{},
 		&BranchCleanupCheck{},
