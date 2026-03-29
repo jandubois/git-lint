@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 )
@@ -75,6 +76,11 @@ func main() {
 		*identityName, *workEmail, *personalEmail,
 		*stashMaxAge, *stashMaxCount, *uncommittedMaxAge, *unpushedMaxAge,
 	)
+
+	if err := checkGlobalEmail(cfg); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(2)
+	}
 
 	if *describe {
 		probeDescribe(cfg)
@@ -158,6 +164,25 @@ func applyFlags(cfg *Config,
 			cfg.Thresholds.UnpushedMaxAge = Duration{d}
 		}
 	}
+}
+
+// checkGlobalEmail verifies that the global git user.email matches the
+// configured personal email. A mismatched global email causes repos to be
+// misclassified as work or personal.
+func checkGlobalEmail(cfg *Config) error {
+	want := cfg.Identity.PersonalEmail
+	if want == "" {
+		return nil
+	}
+	out, err := exec.Command("git", "config", "--global", "user.email").Output()
+	if err != nil {
+		return fmt.Errorf("global user.email is not set; run: git config --global user.email %s", want)
+	}
+	got := strings.TrimRight(string(out), "\n")
+	if got != want {
+		return fmt.Errorf("global user.email is %q, expected %q; run: git config --global user.email %s", got, want, want)
+	}
+	return nil
 }
 
 type lintOptions struct {

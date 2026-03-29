@@ -42,13 +42,6 @@ func (r *Repo) classify() error {
 		}
 	}
 
-	// A repo using the work email is also treated as a work repo.
-	// Use effective config: a globally-set work email still means work.
-	email := r.GitConfigEffective("user.email")
-	if email != "" && email == r.Config.Identity.WorkEmail {
-		r.Work = true
-	}
-
 	return nil
 }
 
