@@ -144,16 +144,22 @@ For repos where `origin` is a GitHub fork, git-lint queries the fork parent via 
 | No untracked files older than threshold | warn only |
 | No unpushed commits older than threshold | warn only |
 
+Uncommitted and untracked checks run in every worktree, not just the main work dir.
+
 ### Branch cleanup (all repos)
 
-| Check | Fix |
-|-------|-----|
-| No branches with deleted upstream (`[gone]`) | `git branch -D` |
-| No branches fully merged into main | `git branch -D` |
-| No stale `gh pr checkout` branches (PR merged or updated since checkout) | `git branch -D` |
-| No orphan branches by other authors (no upstream, tip by someone else) | `git branch -D` |
+git-lint warns about stale local branches and deletes them under `--fix` when safe. Four categories:
 
-The current branch is never deleted; switch to another branch first. Fixable warnings display in cyan on TTY output.
+| Category | Detected when | Fix |
+|----------|---------------|-----|
+| `branch/merged` | Tip is reachable from `main` (or `main@{upstream}`) | `git branch -D` |
+| `branch/gone` | Upstream is configured but deleted on the remote | `git branch -D` if the tip is an ancestor of main or belongs to a merged GitHub PR; otherwise warn only |
+| `branch/pr` | Tracks `refs/pull/N/head` and the PR is merged, closed, or updated since checkout | `git branch -D` |
+| `branch/orphan` | No upstream and tip is by another author | `git branch -D` |
+
+git-lint never deletes a branch checked out in the current worktree; switch branches first. For a branch checked out in another worktree, git-lint shows `(checked out at <path>)` and skips the fix — except for `branch/merged` in a clean worktree (no uncommitted changes), which git-lint removes with `git worktree remove` before deleting the branch. Orphan worktree branches with no merge base into main, such as `.reviews`, never qualify as merged and stay untouched.
+
+Fixable warnings display in cyan on TTY output.
 
 ### Submodules (repos with `.gitmodules`)
 
