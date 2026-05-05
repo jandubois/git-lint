@@ -157,7 +157,7 @@ git-lint warns about stale local branches and deletes them under `--fix` when sa
 | `branch/pr` | Tracks `refs/pull/N/head` and the PR is merged, closed, or updated since checkout | `git branch -D` |
 | `branch/orphan` | No upstream and tip is by another author | `git branch -D` |
 
-git-lint never deletes a branch checked out in the current worktree; switch branches first. For a branch checked out in another worktree, git-lint shows `(checked out at <path>)` and skips the fix — except for `branch/merged` in a clean worktree (no uncommitted changes), which git-lint removes with `git worktree remove` before deleting the branch. Orphan worktree branches with no merge base into main, such as `.reviews`, never qualify as merged and stay untouched.
+git-lint never deletes a branch checked out in the current worktree; switch branches first. For a branch checked out in another worktree, git-lint cleans up only when the worktree is clean (no uncommitted or untracked changes): `git worktree remove` first, then delete the branch. For a dirty worktree, git-lint shows `(checked out at <path>, uncommitted changes)` and skips the fix. Worktrees holding branches that never look stale (such as `.reviews`) stay untouched.
 
 Fixable warnings display in cyan on TTY output.
 

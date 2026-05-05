@@ -30,21 +30,14 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 		if name == mainBranch {
 			continue
 		}
-		fixable := worktree == ""
-		var notFixableReason string
-		if !fixable {
-			if worktree == repo.Dir {
-				notFixableReason = " (checked out, switch branch to fix)"
-			} else {
-				notFixableReason = fmt.Sprintf(" (checked out at %s)", worktree)
-			}
-		}
 
 		var r *Result
+		safe := true
+		var unsafeReason string
 		if strings.Contains(track, "gone") {
-			if fixable && !goneBranchSafe(repo, name, mainBranch) {
-				fixable = false
-				notFixableReason = " (local commits not in main; use git branch -D to discard)"
+			if !goneBranchSafe(repo, name, mainBranch) {
+				safe = false
+				unsafeReason = " (local commits not in main; use git branch -D to discard)"
 			}
 			r = &Result{
 				Name:    fmt.Sprintf("branch/gone[%s]", name),
@@ -66,17 +59,32 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 				Message: fmt.Sprintf("no upstream, tip by %s (%s)", author, hash),
 			}
 		}
-		if r != nil {
-			if strings.HasPrefix(r.Name, "branch/merged[") &&
-				worktree != "" && worktree != repo.Dir && worktreeClean(worktree) {
-				fixable = true
-				notFixableReason = ""
-			}
-			r.Status = StatusWarn
-			r.Fixable = fixable
-			r.Message += notFixableReason
-			results = append(results, *r)
+		if r == nil {
+			continue
 		}
+
+		// Fixable when the branch is safe to delete and reachable: not in
+		// any worktree, or in another worktree that has no uncommitted or
+		// untracked changes (in which case Fix removes the worktree first).
+		fixable := false
+		var notFixableReason string
+		switch {
+		case !safe:
+			notFixableReason = unsafeReason
+		case worktree == "":
+			fixable = true
+		case worktree == repo.Dir:
+			notFixableReason = " (checked out, switch branch to fix)"
+		case worktreeClean(worktree):
+			fixable = true
+		default:
+			notFixableReason = fmt.Sprintf(" (checked out at %s, uncommitted changes)", worktree)
+		}
+
+		r.Status = StatusWarn
+		r.Fixable = fixable
+		r.Message += notFixableReason
+		results = append(results, *r)
 	}
 
 	if len(results) == 0 {
