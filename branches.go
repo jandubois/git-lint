@@ -67,6 +67,11 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 			}
 		}
 		if r != nil {
+			if strings.HasPrefix(r.Name, "branch/merged[") &&
+				worktree != "" && worktree != repo.Dir && worktreeClean(worktree) {
+				fixable = true
+				notFixableReason = ""
+			}
 			r.Status = StatusWarn
 			r.Fixable = fixable
 			r.Message += notFixableReason
@@ -96,18 +101,50 @@ func (c *BranchCleanupCheck) Fix(repo *Repo, results []Result) []Result {
 			fixed = append(fixed, r)
 			continue
 		}
+		removedWorktree := false
+		if wtPath := branchWorktreePath(repo, param); wtPath != "" {
+			if _, err := repo.Git("worktree", "remove", wtPath); err != nil {
+				fixed = append(fixed, r)
+				continue
+			}
+			removedWorktree = true
+		}
 		_, err := repo.Git("branch", "-D", param)
 		if err != nil {
 			fixed = append(fixed, r)
 		} else {
+			msg := fmt.Sprintf("deleted %s", param)
+			if removedWorktree {
+				msg = fmt.Sprintf("removed worktree and deleted %s", param)
+			}
 			fixed = append(fixed, Result{
 				Name:    r.Name,
 				Status:  StatusFix,
-				Message: fmt.Sprintf("deleted %s", param),
+				Message: msg,
 			})
 		}
 	}
 	return fixed
+}
+
+// worktreeClean reports whether the worktree at path has no uncommitted
+// or untracked changes.
+func worktreeClean(path string) bool {
+	out, err := gitInDir(path, "status", "--porcelain")
+	if err != nil {
+		return false
+	}
+	return out == ""
+}
+
+// branchWorktreePath returns the worktree path where branch is checked out,
+// or "" if the branch is not in any worktree.
+func branchWorktreePath(repo *Repo, branch string) string {
+	out, err := repo.Git("for-each-ref", "--format=%(worktreepath)", "refs/heads/"+branch)
+	if err != nil {
+		return ""
+	}
+	return out
 }
 
 // goneBranchSafe reports whether deleting a branch with a deleted upstream
