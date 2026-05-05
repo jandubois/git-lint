@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -65,9 +66,33 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 		}
 	}
 
-	// Uncommitted changes and untracked files.
+	// Uncommitted changes and untracked files (per worktree).
 	maxUncommitted := repo.Config.Thresholds.UncommittedMaxAge.Duration
-	porcelain, _ := repo.Git("status", "--porcelain")
+	worktrees := listWorktrees(repo)
+	if len(worktrees) == 0 {
+		worktrees = []string{repo.Dir}
+	}
+	for _, wt := range worktrees {
+		results = append(results, worktreeStaleness(repo, wt, maxUncommitted)...)
+	}
+
+	return results
+}
+
+// worktreeStaleness reports uncommitted/untracked staleness for one worktree.
+// Result names are suffixed with [<relpath>] for non-main worktrees so each
+// worktree appears as a separate row in the output.
+func worktreeStaleness(repo *Repo, wt string, maxUncommitted time.Duration) []Result {
+	suffix := ""
+	if wt != repo.Dir {
+		rel, err := filepath.Rel(repo.Dir, wt)
+		if err != nil {
+			rel = wt
+		}
+		suffix = fmt.Sprintf("[%s]", rel)
+	}
+
+	porcelain, _ := gitInDir(wt, "status", "--porcelain")
 	var uncommittedLines, untrackedLines []string
 	for _, line := range strings.Split(porcelain, "\n") {
 		if line == "" {
@@ -80,20 +105,21 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 		}
 	}
 
-	age := uncommittedAge(repo)
+	age := uncommittedAge(wt)
 	stale := age > maxUncommitted
 
+	var results []Result
 	if len(uncommittedLines) > 0 {
 		if stale {
 			results = append(results, Result{
-				Name:    "staleness/uncommitted",
+				Name:    "staleness/uncommitted" + suffix,
 				Status:  StatusFail,
 				Message: fmt.Sprintf("uncommitted changes for %s (max %s)", formatDuration(age), formatDuration(maxUncommitted)),
 				Details: uncommittedLines,
 			})
 		} else {
 			results = append(results, Result{
-				Name:    "staleness/uncommitted",
+				Name:    "staleness/uncommitted" + suffix,
 				Status:  StatusOK,
 				Message: "uncommitted changes are recent",
 			})
@@ -103,14 +129,14 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 	if len(untrackedLines) > 0 {
 		if stale {
 			results = append(results, Result{
-				Name:    "staleness/untracked",
+				Name:    "staleness/untracked" + suffix,
 				Status:  StatusFail,
 				Message: fmt.Sprintf("%d untracked files for %s (max %s)", len(untrackedLines), formatDuration(age), formatDuration(maxUncommitted)),
 				Details: untrackedLines,
 			})
 		} else {
 			results = append(results, Result{
-				Name:    "staleness/untracked",
+				Name:    "staleness/untracked" + suffix,
 				Status:  StatusOK,
 				Message: "untracked files are recent",
 			})
@@ -119,13 +145,28 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 
 	if len(uncommittedLines) == 0 && len(untrackedLines) == 0 {
 		results = append(results, Result{
-			Name:    "staleness/uncommitted",
+			Name:    "staleness/uncommitted" + suffix,
 			Status:  StatusOK,
 			Message: "working tree clean",
 		})
 	}
 
 	return results
+}
+
+// listWorktrees returns paths of all worktrees attached to the repo.
+func listWorktrees(repo *Repo) []string {
+	out, err := repo.Git("worktree", "list", "--porcelain")
+	if err != nil {
+		return nil
+	}
+	var paths []string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "worktree ") {
+			paths = append(paths, strings.TrimPrefix(line, "worktree "))
+		}
+	}
+	return paths
 }
 
 func (c *StalenessCheck) Fix(_ *Repo, results []Result) []Result {
@@ -157,10 +198,10 @@ func stashEntries(repo *Repo) ([]stashEntry, error) {
 	return entries, nil
 }
 
-// uncommittedAge returns how long ago the working tree last changed,
-// approximated by the time since the last commit.
-func uncommittedAge(repo *Repo) time.Duration {
-	out, err := repo.Git("log", "-1", "--format=%ci")
+// uncommittedAge returns how long ago the working tree at dir last changed,
+// approximated by the time since its HEAD's last commit.
+func uncommittedAge(dir string) time.Duration {
+	out, err := gitInDir(dir, "log", "-1", "--format=%ci")
 	if err != nil || out == "" {
 		return 0
 	}
