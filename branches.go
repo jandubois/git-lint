@@ -8,11 +8,10 @@ import (
 type BranchCleanupCheck struct{}
 
 func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
-	currentBranch, _ := repo.Git("symbolic-ref", "--short", "HEAD")
 	mainBranch := repo.MainBranch()
 
 	out, err := repo.Git("for-each-ref",
-		"--format=%(refname:short)|%(objectname:short)|%(authorname)|%(upstream:track)|%(upstream)",
+		"--format=%(refname:short)|%(objectname:short)|%(authorname)|%(upstream:track)|%(upstream)|%(worktreepath)",
 		"refs/heads/")
 	if err != nil || out == "" {
 		return nil
@@ -22,16 +21,16 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 
 	var results []Result
 	for _, line := range strings.Split(out, "\n") {
-		parts := strings.SplitN(line, "|", 5)
-		if len(parts) < 5 {
+		parts := strings.SplitN(line, "|", 6)
+		if len(parts) < 6 {
 			continue
 		}
-		name, hash, author, track, upstream := parts[0], parts[1], parts[2], parts[3], parts[4]
+		name, hash, author, track, upstream, worktree := parts[0], parts[1], parts[2], parts[3], parts[4], parts[5]
 
 		if name == mainBranch {
 			continue
 		}
-		fixable := name != currentBranch
+		fixable := worktree == ""
 
 		var r *Result
 		if strings.Contains(track, "gone") {
@@ -59,7 +58,11 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 			r.Status = StatusWarn
 			r.Fixable = fixable
 			if !fixable {
-				r.Message += " (checked out, switch branch to fix)"
+				if worktree == repo.Dir {
+					r.Message += " (checked out, switch branch to fix)"
+				} else {
+					r.Message += fmt.Sprintf(" (checked out at %s)", worktree)
+				}
 			}
 			results = append(results, *r)
 		}
