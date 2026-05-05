@@ -31,9 +31,21 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 			continue
 		}
 		fixable := worktree == ""
+		var notFixableReason string
+		if !fixable {
+			if worktree == repo.Dir {
+				notFixableReason = " (checked out, switch branch to fix)"
+			} else {
+				notFixableReason = fmt.Sprintf(" (checked out at %s)", worktree)
+			}
+		}
 
 		var r *Result
 		if strings.Contains(track, "gone") {
+			if fixable && !goneBranchSafe(repo, name, mainBranch) {
+				fixable = false
+				notFixableReason = " (local commits not in main; use git branch -D to discard)"
+			}
 			r = &Result{
 				Name:    fmt.Sprintf("branch/gone[%s]", name),
 				Message: fmt.Sprintf("upstream deleted (%s by %s)", hash, author),
@@ -57,13 +69,7 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 		if r != nil {
 			r.Status = StatusWarn
 			r.Fixable = fixable
-			if !fixable {
-				if worktree == repo.Dir {
-					r.Message += " (checked out, switch branch to fix)"
-				} else {
-					r.Message += fmt.Sprintf(" (checked out at %s)", worktree)
-				}
-			}
+			r.Message += notFixableReason
 			results = append(results, *r)
 		}
 	}
@@ -102,6 +108,36 @@ func (c *BranchCleanupCheck) Fix(repo *Repo, results []Result) []Result {
 		}
 	}
 	return fixed
+}
+
+// goneBranchSafe reports whether deleting a branch with a deleted upstream
+// would not lose unique local work. Safe when the tip is an ancestor of
+// main (or its upstream), or when GitHub knows the tip belongs to a merged
+// PR (covers squash and rebase merges where the tip is not an ancestor).
+// Returns false on any uncertainty, honoring the "never discard local
+// commits" principle.
+func goneBranchSafe(repo *Repo, branch, mainBranch string) bool {
+	if mainBranch != "" {
+		for _, ref := range []string{mainBranch + "@{upstream}", mainBranch} {
+			if _, err := repo.Git("merge-base", "--is-ancestor", branch, ref); err == nil {
+				return true
+			}
+		}
+	}
+	remote, _ := repo.Git("config", fmt.Sprintf("branch.%s.remote", branch))
+	if remote == "" {
+		return false
+	}
+	owner, repoName := parseGitHubRepo(repo.RemoteURL(remote))
+	if owner == "" {
+		return false
+	}
+	sha, err := repo.Git("rev-parse", branch)
+	if err != nil {
+		return false
+	}
+	inMerged, _ := ghCommitInMergedPR(owner, repoName, sha)
+	return inMerged
 }
 
 // stalePRCheckout returns a non-empty reason if branch tracks a refs/pull/

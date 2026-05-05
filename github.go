@@ -51,6 +51,20 @@ func ghPRState(owner, repo, number string) (string, bool) {
 	return strings.TrimSpace(string(out)), true
 }
 
+// ghCommitInMergedPR reports whether the commit SHA belongs to any merged
+// PR in owner/repo. Returns (false, false) on any error so callers can
+// conservatively treat unknown as "not safe".
+func ghCommitInMergedPR(owner, repo, sha string) (inMerged bool, ok bool) {
+	out, err := exec.Command("gh", "api",
+		"repos/"+owner+"/"+repo+"/commits/"+sha+"/pulls",
+		"--jq", `[.[] | select(.merged_at != null)] | length`).Output()
+	if err != nil {
+		return false, false
+	}
+	n := strings.TrimSpace(string(out))
+	return n != "" && n != "0", true
+}
+
 // ghRepoPrivate queries the GitHub API to check if owner/repo is private.
 // Returns (private, true) on success, or (false, false) on any error.
 func ghRepoPrivate(owner, repo string) (private bool, ok bool) {
