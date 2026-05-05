@@ -53,10 +53,29 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 				Name:    fmt.Sprintf("branch/pr[%s]", name),
 				Message: reason,
 			}
-		} else if upstream == "" && author != repo.Config.Identity.Name {
-			r = &Result{
-				Name:    fmt.Sprintf("branch/orphan[%s]", name),
-				Message: fmt.Sprintf("no upstream, tip by %s (%s)", author, hash),
+		} else if author != repo.Config.Identity.Name {
+			// Orphan-like: branch by another author with no upstream, or
+			// tracking a remote other than origin (e.g., checked out from
+			// an upstream PR branch).
+			var trackedRemote string
+			if upstream != "" {
+				trackedRemote, _ = repo.Git("config", fmt.Sprintf("branch.%s.remote", name))
+			}
+			switch {
+			case upstream == "":
+				r = &Result{
+					Name:    fmt.Sprintf("branch/orphan[%s]", name),
+					Message: fmt.Sprintf("no upstream, tip by %s (%s)", author, hash),
+				}
+			case trackedRemote != "" && trackedRemote != "origin":
+				r = &Result{
+					Name:    fmt.Sprintf("branch/orphan[%s]", name),
+					Message: fmt.Sprintf("tracks %s, tip by %s (%s)", trackedRemote, author, hash),
+				}
+				if !nonOriginBranchSafe(repo, name, trackedRemote) {
+					safe = false
+					unsafeReason = fmt.Sprintf(" (no merged PR on %s; use git branch -D to discard)", trackedRemote)
+				}
 			}
 		}
 		if r == nil {
@@ -153,6 +172,30 @@ func branchWorktreePath(repo *Repo, branch string) string {
 		return ""
 	}
 	return out
+}
+
+// nonOriginBranchSafe reports whether deleting a branch tracking a non-origin
+// remote would not lose unique upstream work. Safe when the tip is an ancestor
+// of the tracked remote's default branch (covers true merges and fast-forwards),
+// or when GitHub knows the tip belongs to a merged PR on that remote (covers
+// squash and rebase merges).
+func nonOriginBranchSafe(repo *Repo, branch, remote string) bool {
+	headRef, _ := repo.Git("symbolic-ref", "refs/remotes/"+remote+"/HEAD")
+	if headRef != "" {
+		if _, err := repo.Git("merge-base", "--is-ancestor", branch, headRef); err == nil {
+			return true
+		}
+	}
+	owner, repoName := parseGitHubRepo(repo.RemoteURL(remote))
+	if owner == "" {
+		return false
+	}
+	sha, err := repo.Git("rev-parse", branch)
+	if err != nil {
+		return false
+	}
+	inMerged, _ := ghCommitInMergedPR(owner, repoName, sha)
+	return inMerged
 }
 
 // goneBranchSafe reports whether deleting a branch with a deleted upstream

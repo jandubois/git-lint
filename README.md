@@ -155,7 +155,7 @@ git-lint warns about stale local branches and deletes them under `--fix` when sa
 | `branch/merged` | Tip is reachable from `main` (or `main@{upstream}`) | `git branch -D` |
 | `branch/gone` | Upstream is configured but deleted on the remote | `git branch -D` if the tip is an ancestor of main or belongs to a merged GitHub PR; otherwise warn only |
 | `branch/pr` | Tracks `refs/pull/N/head` and the PR is merged, closed, or updated since checkout | `git branch -D` |
-| `branch/orphan` | No upstream and tip is by another author | `git branch -D` |
+| `branch/orphan` | Tip is by another author and either has no upstream or tracks a remote other than `origin` | `git branch -D`; for non-origin tracking, only when the tip is an ancestor of the tracked remote's default branch or belongs to a merged GitHub PR there |
 
 git-lint never deletes a branch checked out in the current worktree; switch branches first. For a branch checked out in another worktree, git-lint cleans up only when the worktree is clean (no uncommitted or untracked changes): `git worktree remove` first, then delete the branch. For a dirty worktree, git-lint shows `(checked out at <path>, uncommitted changes)` and skips the fix. Worktrees holding branches that never look stale (such as `.reviews`) stay untouched.
 
