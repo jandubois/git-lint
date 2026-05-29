@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -116,4 +117,24 @@ func (r *Repo) RemoteForURL(substring string) string {
 		}
 	}
 	return ""
+}
+
+// canonPath returns an absolute, symlink-resolved form of p with normalized
+// separators. Git reports worktree paths as resolved, forward-slash strings;
+// canonPath brings filepath-built paths into the same form so the two compare
+// equal across platforms. On error it falls back to the cleaned input.
+func canonPath(p string) string {
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		p = resolved
+	}
+	if abs, err := filepath.Abs(p); err == nil {
+		p = abs
+	}
+	return filepath.Clean(p)
+}
+
+// sameDir reports whether two paths refer to the same directory, comparing
+// their canonical forms.
+func sameDir(a, b string) bool {
+	return canonPath(a) == canonPath(b)
 }

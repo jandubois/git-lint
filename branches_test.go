@@ -40,6 +40,27 @@ func TestBranchCleanupMergedBranchFixable(t *testing.T) {
 	}
 }
 
+func TestBranchCleanupCheckedOutBranchNotFixable(t *testing.T) {
+	r := newTestRepo(t)
+	r.commit("a.txt", "a", "first", time.Now())
+	r.git("checkout", "-b", "feature")
+	r.commit("b.txt", "b", "feature work", time.Now())
+	r.git("checkout", "main")
+	r.git("merge", "feature")
+	// Leave feature checked out: it is merged but currently in the main
+	// worktree, so deleting it must require switching branches first.
+	r.git("checkout", "feature")
+
+	results := (&BranchCleanupCheck{}).Check(r.Repo)
+	got, ok := resultByName(results, "branch/merged[feature]")
+	if !ok {
+		t.Fatalf("missing merged result; got %+v", results)
+	}
+	if got.Fixable {
+		t.Errorf("checked-out branch reported fixable; message %q", got.Message)
+	}
+}
+
 func TestBranchCleanupOrphanForeignAuthor(t *testing.T) {
 	r := newTestRepo(t)
 	r.commit("a.txt", "a", "first", time.Now())

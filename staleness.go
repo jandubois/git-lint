@@ -84,8 +84,8 @@ func (c *StalenessCheck) Check(repo *Repo) []Result {
 // worktree appears as a separate row in the output.
 func worktreeStaleness(repo *Repo, wt string, maxUncommitted time.Duration) []Result {
 	suffix := ""
-	if wt != repo.Dir {
-		rel, err := filepath.Rel(repo.Dir, wt)
+	if !sameDir(wt, repo.Dir) {
+		rel, err := filepath.Rel(canonPath(repo.Dir), canonPath(wt))
 		if err != nil {
 			rel = wt
 		}

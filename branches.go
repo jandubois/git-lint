@@ -92,7 +92,7 @@ func (c *BranchCleanupCheck) Check(repo *Repo) []Result {
 			notFixableReason = unsafeReason
 		case worktree == "":
 			fixable = true
-		case worktree == repo.Dir:
+		case sameDir(worktree, repo.Dir):
 			notFixableReason = " (checked out, switch branch to fix)"
 		case worktreeClean(worktree):
 			fixable = true

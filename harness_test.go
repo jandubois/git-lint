@@ -23,13 +23,7 @@ type testRepo struct {
 // fields so IdentityCheck passes by default; tests adjust it as needed.
 func newTestRepo(t *testing.T) *testRepo {
 	t.Helper()
-	// Resolve symlinks so repo.Dir matches the paths git reports (macOS temp
-	// dirs live under /var, a symlink to /private/var). A real repo at a
-	// non-symlinked path needs no such resolution; this mirrors that case.
-	dir, err := filepath.EvalSymlinks(t.TempDir())
-	if err != nil {
-		t.Fatal(err)
-	}
+	dir := t.TempDir()
 
 	// Isolate from the developer's real git config. GIT_CONFIG_GLOBAL points
 	// at an empty file and GIT_CONFIG_NOSYSTEM drops the system config, so
