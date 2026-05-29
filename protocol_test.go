@@ -19,6 +19,38 @@ func TestURLProtocol(t *testing.T) {
 	}
 }
 
+func TestProtocolCheckConvertsRemote(t *testing.T) {
+	r := newTestRepo(t)
+	r.git("remote", "add", "origin", "https://github.com/owner/repo.git")
+	r.Config.Protocol = "ssh"
+	r.reload()
+
+	results := (&ProtocolCheck{}).Check(r.Repo)
+	got, ok := resultByName(results, "remote/protocol[origin]")
+	if !ok || got.Status != StatusFail || !got.Fixable {
+		t.Fatalf("protocol check = %+v, want fixable fail", results)
+	}
+
+	fixed := (&ProtocolCheck{}).Fix(r.Repo, results)
+	gotFix, _ := resultByName(fixed, "remote/protocol[origin]")
+	if gotFix.Status != StatusFix {
+		t.Errorf("after fix: status = %q, want fix", gotFix.Status)
+	}
+	if url := r.git("remote", "get-url", "origin"); url != "git@github.com:owner/repo.git" {
+		t.Errorf("origin url = %q, want ssh form", url)
+	}
+}
+
+func TestProtocolCheckDisabledWhenUnset(t *testing.T) {
+	r := newTestRepo(t)
+	r.git("remote", "add", "origin", "https://github.com/owner/repo.git")
+	r.reload()
+
+	if results := (&ProtocolCheck{}).Check(r.Repo); results != nil {
+		t.Errorf("protocol unset: got %+v, want nil", results)
+	}
+}
+
 func TestConvertGitHubURL(t *testing.T) {
 	tests := []struct {
 		url    string

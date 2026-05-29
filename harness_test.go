@@ -60,6 +60,17 @@ func newTestRepo(t *testing.T) *testRepo {
 	return r
 }
 
+// reload rebuilds the Repo from the current config, re-running the work/fork
+// classification after a test changes remotes or config.
+func (r *testRepo) reload() {
+	r.t.Helper()
+	repo, err := NewRepo(r.dir, r.Config)
+	if err != nil {
+		r.t.Fatalf("NewRepo: %v", err)
+	}
+	r.Repo = repo
+}
+
 // git runs a git command in the repo and fails the test on error.
 func (r *testRepo) git(args ...string) string {
 	r.t.Helper()
