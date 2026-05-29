@@ -2,6 +2,31 @@ package main
 
 import "testing"
 
+func TestRemoteUpstreamPushURLFixable(t *testing.T) {
+	r := newTestRepo(t)
+	r.git("remote", "add", "origin", "git@github.com:me/repo.git")
+	r.git("remote", "add", "upstream", "git@github.com:acme/repo.git")
+	// Cache the fork-parent lookups as "none" so the check never calls gh.
+	r.git("config", "remote.origin.gh-parent", "none")
+	r.git("config", "remote.upstream.gh-parent", "none")
+	r.reload()
+
+	results := (&RemoteCheck{}).Check(r.Repo)
+	got, ok := resultByName(results, "remote/push-url")
+	if !ok || got.Status != StatusFail || !got.Fixable {
+		t.Fatalf("push-url check = %+v, want fixable fail", results)
+	}
+
+	fixed := (&RemoteCheck{}).Fix(r.Repo, results)
+	gotFix, _ := resultByName(fixed, "remote/push-url")
+	if gotFix.Status != StatusFix {
+		t.Errorf("after fix: status = %q, want fix", gotFix.Status)
+	}
+	if url := r.git("config", "--local", "remote.upstream.pushurl"); url != "DISABLED" {
+		t.Errorf("upstream pushurl = %q, want DISABLED", url)
+	}
+}
+
 func TestHasRemote(t *testing.T) {
 	remotes := []string{"origin", "upstream"}
 	if !hasRemote(remotes, "upstream") {
