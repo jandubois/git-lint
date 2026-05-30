@@ -13,6 +13,9 @@ type Repo struct {
 	Dir    string
 	Config *Config
 	Work   bool // true if any remote URL matches a work org
+
+	mainBranch    string
+	mainBranchSet bool
 }
 
 func NewRepo(dir string, cfg *Config) (*Repo, error) {
@@ -97,12 +100,75 @@ func (r *Repo) RemoteURL(name string) string {
 	return r.GitConfig("remote." + name + ".url")
 }
 
-// MainBranch returns the name of the main branch ("main" or "master").
-// Returns "" if neither exists.
+// MainBranch returns the name of the default branch. It prefers a local
+// "main" or "master"; in a fork that has neither, it returns the local branch
+// matching the upstream's default branch, covering custom default-branch
+// names. Returns "" if none is found. The result is memoized.
 func (r *Repo) MainBranch() string {
+	if !r.mainBranchSet {
+		r.mainBranch = r.computeMainBranch()
+		r.mainBranchSet = true
+	}
+	return r.mainBranch
+}
+
+func (r *Repo) computeMainBranch() string {
 	for _, name := range []string{"main", "master"} {
-		if err := exec.Command("git", "-C", r.Dir, "rev-parse", "--verify", "--quiet", name).Run(); err == nil {
+		if r.hasLocalBranch(name) {
 			return name
+		}
+	}
+	// Custom default branch: a fork whose default is neither main nor master.
+	if !r.hasRemoteNamed("upstream") {
+		return ""
+	}
+	if def := r.upstreamDefaultBranch(); def != "" && r.hasLocalBranch(def) {
+		return def
+	}
+	return ""
+}
+
+// hasLocalBranch reports whether a local branch with the given name exists.
+func (r *Repo) hasLocalBranch(name string) bool {
+	return exec.Command("git", "-C", r.Dir, "rev-parse", "--verify", "--quiet", "refs/heads/"+name).Run() == nil
+}
+
+// hasRemoteNamed reports whether a remote with the given name is configured.
+func (r *Repo) hasRemoteNamed(name string) bool {
+	remotes, _ := r.Remotes()
+	return hasRemote(remotes, name)
+}
+
+// upstreamDefaultBranch returns the upstream remote's default branch name. It
+// reads the local upstream/HEAD symref first, then a cached value, and only as
+// a last resort queries the remote over the network, caching the result.
+func (r *Repo) upstreamDefaultBranch() string {
+	if ref, err := r.Git("symbolic-ref", "--short", "refs/remotes/upstream/HEAD"); err == nil && ref != "" {
+		return strings.TrimPrefix(ref, "upstream/")
+	}
+	if cached := r.GitConfig("remote.upstream.lint-default"); cached != "" {
+		return cached
+	}
+	out, err := r.Git("ls-remote", "--symref", "upstream", "HEAD")
+	if err != nil {
+		return ""
+	}
+	def := symrefHeadBranch(out)
+	if def != "" {
+		r.SetGitConfig("remote.upstream.lint-default", def)
+	}
+	return def
+}
+
+// symrefHeadBranch extracts the branch name from `git ls-remote --symref`
+// output, mapping a line like "ref: refs/heads/main\tHEAD" to "main".
+func symrefHeadBranch(out string) string {
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "ref:") {
+			fields := strings.Fields(line)
+			if len(fields) >= 2 {
+				return strings.TrimPrefix(fields[1], "refs/heads/")
+			}
 		}
 	}
 	return ""

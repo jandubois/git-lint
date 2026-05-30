@@ -179,7 +179,7 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 	hasUpstream := hasRemote(remotes, "upstream")
 	if err == nil && branchOut != "" {
 		for _, branch := range strings.Split(branchOut, "\n") {
-			if branch == mainBranch || (branch == "reviews" && hasUpstream) {
+			if branch == mainBranch || (branch == "reviews" && hasUpstream) || strings.HasPrefix(branch, "release-") {
 				continue
 			}
 			remote := repo.GitConfig(fmt.Sprintf("branch.%s.remote", branch))
@@ -213,11 +213,24 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 		}
 	}
 
+	// The default branch and any release-* branches should track upstream and
+	// disable pushes, in any repo that has an upstream remote.
+	if hasUpstream {
+		if mainBranch != "" {
+			results = append(results, upstreamTrackingResults(repo, mainBranch, "remote/tracking", "remote/push-guard")...)
+		}
+		for _, branch := range releaseBranches(branchOut) {
+			results = append(results, upstreamTrackingResults(repo, branch,
+				fmt.Sprintf("remote/release-tracking[%s]", branch),
+				fmt.Sprintf("remote/release-push-guard[%s]", branch))...)
+		}
+	}
+
 	if !repo.Work {
 		return results
 	}
 
-	// Rule 4: origin should point to personal fork, not work org.
+	// origin should point to the personal fork, not the work org.
 	originURL := repo.RemoteURL("origin")
 	if org := workOrgInURL(originURL, repo.Config.WorkOrgs); org != "" {
 		results = append(results, Result{
@@ -233,52 +246,71 @@ func (c *RemoteCheck) Check(repo *Repo) []Result {
 		})
 	}
 
-	// Rules 5-6 require a main branch.
-	if mainBranch != "" {
-		// Rule 5: main/master should track a non-origin remote.
-		upstream := repo.GitConfig(fmt.Sprintf("branch.%s.remote", mainBranch))
-		upstreamRemote := upstreamFor(repo, remotes)
-		if upstreamRemote == "" {
-			// No non-origin work remote found; skip tracking check.
-			results = append(results, Result{
-				Name:    "remote/tracking",
-				Status:  StatusOK,
-				Message: fmt.Sprintf("%s tracks %s", mainBranch, upstream),
-			})
-		} else if upstream == upstreamRemote {
-			results = append(results, Result{
-				Name:    "remote/tracking",
-				Status:  StatusOK,
-				Message: fmt.Sprintf("%s tracks %s", mainBranch, upstream),
-			})
-		} else {
-			results = append(results, Result{
-				Name:    "remote/tracking",
-				Status:  StatusFail,
-				Message: fmt.Sprintf("%s tracks %q, should track %q", mainBranch, upstream, upstreamRemote),
-				Fixable: true,
-			})
-		}
+	return results
+}
 
-		// Rule 6: main/master pushRemote = DISABLED.
-		pushRemote := repo.GitConfig(fmt.Sprintf("branch.%s.pushRemote", mainBranch))
-		if pushRemote == "DISABLED" {
-			results = append(results, Result{
-				Name:    "remote/push-guard",
-				Status:  StatusOK,
-				Message: fmt.Sprintf("%s pushRemote is DISABLED", mainBranch),
-			})
-		} else {
-			results = append(results, Result{
-				Name:    "remote/push-guard",
-				Status:  StatusFail,
-				Message: fmt.Sprintf("%s pushRemote is %q, should be DISABLED", mainBranch, pushRemote),
-				Fixable: true,
-			})
-		}
+// upstreamTrackingResults checks that a branch tracks upstream and disables
+// pushes, the configuration the default and release-* branches share.
+func upstreamTrackingResults(repo *Repo, branch, trackName, guardName string) []Result {
+	var results []Result
+
+	remote := repo.GitConfig(fmt.Sprintf("branch.%s.remote", branch))
+	if remote == "upstream" {
+		results = append(results, Result{
+			Name:    trackName,
+			Status:  StatusOK,
+			Message: fmt.Sprintf("%s tracks upstream", branch),
+		})
+	} else {
+		results = append(results, Result{
+			Name:    trackName,
+			Status:  StatusFail,
+			Message: fmt.Sprintf("%s tracks %q, should track upstream", branch, remote),
+			Fixable: true,
+		})
+	}
+
+	pushRemote := repo.GitConfig(fmt.Sprintf("branch.%s.pushRemote", branch))
+	if pushRemote == "DISABLED" {
+		results = append(results, Result{
+			Name:    guardName,
+			Status:  StatusOK,
+			Message: fmt.Sprintf("%s pushRemote is DISABLED", branch),
+		})
+	} else {
+		results = append(results, Result{
+			Name:    guardName,
+			Status:  StatusFail,
+			Message: fmt.Sprintf("%s pushRemote is %q, should be DISABLED", branch, pushRemote),
+			Fixable: true,
+		})
 	}
 
 	return results
+}
+
+// releaseBranches returns the release-* branches in for-each-ref output.
+func releaseBranches(branchOut string) []string {
+	var out []string
+	for _, b := range strings.Split(branchOut, "\n") {
+		if strings.HasPrefix(b, "release-") {
+			out = append(out, b)
+		}
+	}
+	return out
+}
+
+// fixUpstreamTracking points a branch at upstream for fetch and merge.
+func fixUpstreamTracking(repo *Repo, branch string) error {
+	if err := repo.SetGitConfig(fmt.Sprintf("branch.%s.remote", branch), "upstream"); err != nil {
+		return err
+	}
+	return repo.SetGitConfig(fmt.Sprintf("branch.%s.merge", branch), "refs/heads/"+branch)
+}
+
+// fixPushGuard disables pushes from a branch.
+func fixPushGuard(repo *Repo, branch string) error {
+	return repo.SetGitConfig(fmt.Sprintf("branch.%s.pushRemote", branch), "DISABLED")
 }
 
 func (c *RemoteCheck) Fix(repo *Repo, results []Result) []Result {
@@ -292,34 +324,48 @@ func (c *RemoteCheck) Fix(repo *Repo, results []Result) []Result {
 		}
 		switch {
 		case r.Name == "remote/tracking" && mainBranch != "":
-			remotes, _ := repo.Remotes()
-			upstream := upstreamFor(repo, remotes)
-			if upstream == "" {
-				fixed = append(fixed, r)
-				continue
-			}
-			// Set upstream tracking: branch.<main>.remote and branch.<main>.merge.
-			err1 := repo.SetGitConfig(fmt.Sprintf("branch.%s.remote", mainBranch), upstream)
-			err2 := repo.SetGitConfig(fmt.Sprintf("branch.%s.merge", mainBranch), fmt.Sprintf("refs/heads/%s", mainBranch))
-			if err1 != nil || err2 != nil {
+			if err := fixUpstreamTracking(repo, mainBranch); err != nil {
 				fixed = append(fixed, r)
 			} else {
 				fixed = append(fixed, Result{
 					Name:    r.Name,
 					Status:  StatusFix,
-					Message: fmt.Sprintf("set %s to track %s/%s", mainBranch, upstream, mainBranch),
+					Message: fmt.Sprintf("set %s to track upstream", mainBranch),
 				})
 			}
 
 		case r.Name == "remote/push-guard" && mainBranch != "":
-			key := fmt.Sprintf("branch.%s.pushRemote", mainBranch)
-			if err := repo.SetGitConfig(key, "DISABLED"); err != nil {
+			if err := fixPushGuard(repo, mainBranch); err != nil {
 				fixed = append(fixed, r)
 			} else {
 				fixed = append(fixed, Result{
 					Name:    r.Name,
 					Status:  StatusFix,
 					Message: fmt.Sprintf("set %s pushRemote to DISABLED", mainBranch),
+				})
+			}
+
+		case strings.HasPrefix(r.Name, "remote/release-tracking["):
+			_, branch := splitResultName(r.Name)
+			if err := fixUpstreamTracking(repo, branch); err != nil {
+				fixed = append(fixed, r)
+			} else {
+				fixed = append(fixed, Result{
+					Name:    r.Name,
+					Status:  StatusFix,
+					Message: fmt.Sprintf("set %s to track upstream", branch),
+				})
+			}
+
+		case strings.HasPrefix(r.Name, "remote/release-push-guard["):
+			_, branch := splitResultName(r.Name)
+			if err := fixPushGuard(repo, branch); err != nil {
+				fixed = append(fixed, r)
+			} else {
+				fixed = append(fixed, Result{
+					Name:    r.Name,
+					Status:  StatusFix,
+					Message: fmt.Sprintf("set %s pushRemote to DISABLED", branch),
 				})
 			}
 
@@ -407,24 +453,6 @@ func workOrgInURL(url string, orgs []string) string {
 		if strings.Contains(url, "github.com/"+org+"/") ||
 			strings.Contains(url, "github.com:"+org+"/") {
 			return org
-		}
-	}
-	return ""
-}
-
-// upstreamFor finds the upstream remote: prefers the fork parent remote,
-// falls back to the first non-origin remote whose URL matches a work org.
-func upstreamFor(repo *Repo, remotes []string) string {
-	if parent := repo.ForkParentRemote(); parent != "" {
-		return parent
-	}
-	for _, name := range remotes {
-		if name == "origin" {
-			continue
-		}
-		url := repo.RemoteURL(name)
-		if workOrgInURL(url, repo.Config.WorkOrgs) != "" {
-			return name
 		}
 	}
 	return ""
