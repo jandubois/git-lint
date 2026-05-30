@@ -1,6 +1,45 @@
 package main
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
+
+func TestBranchTrackingSuppressedForOrphan(t *testing.T) {
+	r := newTestRepo(t)
+	r.commit("a.txt", "a", "first", time.Now())
+	r.git("remote", "add", "origin", "git@github.com:me/repo.git")
+	r.git("remote", "add", "nirs", "https://github.com/nirs/repo.git")
+	// Cache the fork-parent lookup so RemoteCheck stays offline.
+	r.git("config", "remote.origin.gh-parent", "none")
+	r.reload()
+
+	// An orphan branch by another author that tracks the non-origin remote.
+	// Setting only branch.<name>.remote (no merge) leaves it without an
+	// upstream ref, so the cleanup check takes the offline no-upstream path.
+	r.git("checkout", "-b", "direct-io")
+	r.commitAs("c.txt", "c", "their work", "Other Dev", "other@example.com", time.Now())
+	r.git("config", "branch.direct-io.remote", "nirs")
+	r.git("checkout", "main")
+
+	// Both checks flag direct-io before suppression.
+	combined := (&RemoteCheck{}).Check(r.Repo)
+	combined = append(combined, (&BranchCleanupCheck{}).Check(r.Repo)...)
+	if _, ok := resultByName(combined, "remote/branch-tracking[direct-io]"); !ok {
+		t.Fatalf("expected remote/branch-tracking warning before suppression; got %+v", combined)
+	}
+	if _, ok := resultByName(combined, "branch/orphan[direct-io]"); !ok {
+		t.Fatalf("expected branch/orphan flag; got %+v", combined)
+	}
+
+	got := suppressRedundantTracking(combined)
+	if _, ok := resultByName(got, "remote/branch-tracking[direct-io]"); ok {
+		t.Error("tracking warning should be suppressed once the branch is flagged for cleanup")
+	}
+	if _, ok := resultByName(got, "branch/orphan[direct-io]"); !ok {
+		t.Error("orphan flag should survive suppression")
+	}
+}
 
 func TestRemoteUpstreamPushURLFixable(t *testing.T) {
 	r := newTestRepo(t)

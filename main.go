@@ -301,10 +301,39 @@ func runChecks(dir string, opts lintOptions) ([]Result, int) {
 		allResults = append(allResults, results...)
 	}
 
+	allResults = suppressRedundantTracking(allResults)
+
 	if hasFailures(allResults) {
 		return allResults, 1
 	}
 	return allResults, 0
+}
+
+// suppressRedundantTracking drops remote/branch-tracking warnings for branches
+// the cleanup check already flags (orphan, merged, gone, or stale PR checkout).
+// Such a branch is slated for deletion, so warning that it tracks a non-origin
+// remote is noise.
+func suppressRedundantTracking(results []Result) []Result {
+	flaggedForCleanup := make(map[string]bool)
+	for _, r := range results {
+		rule, branch := splitResultName(r.Name)
+		if branch != "" && strings.HasPrefix(rule, "branch/") {
+			flaggedForCleanup[branch] = true
+		}
+	}
+	if len(flaggedForCleanup) == 0 {
+		return results
+	}
+
+	var filtered []Result
+	for _, r := range results {
+		rule, branch := splitResultName(r.Name)
+		if rule == "remote/branch-tracking" && flaggedForCleanup[branch] {
+			continue
+		}
+		filtered = append(filtered, r)
+	}
+	return filtered
 }
 
 func printResults(results []Result, opts lintOptions) {

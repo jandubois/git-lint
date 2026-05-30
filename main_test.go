@@ -42,6 +42,25 @@ func TestHasNonOK(t *testing.T) {
 	}
 }
 
+func TestSuppressRedundantTracking(t *testing.T) {
+	results := []Result{
+		{Name: "remote/branch-tracking[direct-io]", Status: StatusWarn},
+		{Name: "branch/orphan[direct-io]", Status: StatusWarn},
+		{Name: "remote/branch-tracking[keep]", Status: StatusWarn},
+	}
+	got := suppressRedundantTracking(results)
+
+	if _, ok := resultByName(got, "remote/branch-tracking[direct-io]"); ok {
+		t.Error("tracking warning for a cleanup-flagged branch should be suppressed")
+	}
+	if _, ok := resultByName(got, "branch/orphan[direct-io]"); !ok {
+		t.Error("orphan flag should be retained")
+	}
+	if _, ok := resultByName(got, "remote/branch-tracking[keep]"); !ok {
+		t.Error("tracking warning for an unflagged branch should be retained")
+	}
+}
+
 func TestApplyFlags(t *testing.T) {
 	cfg := &Config{}
 	applyFlags(cfg, "acme,globex", "ssh", "Jan", "work@x.com", "me@x.com", "7d", 3, "1d", "14d")
