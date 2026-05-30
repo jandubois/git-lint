@@ -47,7 +47,7 @@ jobs:
       - name: Generate checksum
         run: sha256sum git-lint-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} > git-lint-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}.sha256
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: git-lint-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
