@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 // staleHookTemplates defines the exact files (name and size) that can be
@@ -23,11 +24,14 @@ func (c *HooksCheck) Check(repo *Repo) []Result {
 		return nil
 	}
 
+	// Sample hooks that git installs are inert; only active hooks (those
+	// without the .sample suffix) override global config.
 	var files []os.DirEntry
 	for _, e := range entries {
-		if !e.IsDir() {
-			files = append(files, e)
+		if e.IsDir() || strings.HasSuffix(e.Name(), ".sample") {
+			continue
 		}
+		files = append(files, e)
 	}
 	if len(files) == 0 {
 		return nil
@@ -67,7 +71,13 @@ func (c *HooksCheck) Fix(repo *Repo, results []Result) []Result {
 			continue
 		}
 		hooksDir := filepath.Join(repo.Dir, ".git", "hooks")
-		if err := os.RemoveAll(hooksDir); err != nil {
+		failed := false
+		for name := range staleHookTemplates {
+			if err := os.Remove(filepath.Join(hooksDir, name)); err != nil && !os.IsNotExist(err) {
+				failed = true
+			}
+		}
+		if failed {
 			out[i] = r
 			continue
 		}

@@ -21,6 +21,15 @@ func clearHooks(t *testing.T, repoDir string) string {
 	return hooksDir
 }
 
+func TestHooksSampleFilesIgnored(t *testing.T) {
+	r := newTestRepo(t)
+	// git init installs *.sample hook files; these are not active hooks and
+	// must not trigger a warning.
+	if results := (&HooksCheck{}).Check(r.Repo); results != nil {
+		t.Errorf("sample hooks: got %+v, want nil", results)
+	}
+}
+
 func TestHooksEmptyDirNoResult(t *testing.T) {
 	r := newTestRepo(t)
 	clearHooks(t, r.dir)
@@ -54,8 +63,38 @@ func TestHooksStaleTemplatesFixable(t *testing.T) {
 	if gotFix.Status != StatusFix {
 		t.Errorf("after fix: status = %q, want fix", gotFix.Status)
 	}
-	if _, err := os.Stat(hooksDir); !os.IsNotExist(err) {
-		t.Errorf("hooks dir still present after fix (err = %v)", err)
+	for _, name := range []string{"commit-msg", "prepare-commit-msg"} {
+		if _, err := os.Stat(filepath.Join(hooksDir, name)); !os.IsNotExist(err) {
+			t.Errorf("%s still present after fix (err = %v)", name, err)
+		}
+	}
+}
+
+func TestHooksFixPreservesSamples(t *testing.T) {
+	r := newTestRepo(t)
+	hooksDir := filepath.Join(r.dir, ".git", "hooks")
+	// Keep git's installed samples; add the stale templates alongside them.
+	write := func(name string, size int) {
+		if err := os.WriteFile(filepath.Join(hooksDir, name), []byte(strings.Repeat("x", size)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("commit-msg", 635)
+	write("prepare-commit-msg", 358)
+
+	results := (&HooksCheck{}).Check(r.Repo)
+	got, ok := resultByName(results, "hooks/local")
+	if !ok || !got.Fixable {
+		t.Fatalf("stale templates among samples = %+v, want fixable", results)
+	}
+
+	(&HooksCheck{}).Fix(r.Repo, results)
+
+	if _, err := os.Stat(filepath.Join(hooksDir, "commit-msg")); !os.IsNotExist(err) {
+		t.Errorf("commit-msg not removed by fix (err = %v)", err)
+	}
+	if _, err := os.Stat(filepath.Join(hooksDir, "pre-commit.sample")); err != nil {
+		t.Errorf("sample hook removed by fix: %v", err)
 	}
 }
 
