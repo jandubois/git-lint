@@ -22,6 +22,12 @@ jobs:
             goarch: arm64
           - goos: linux
             goarch: amd64
+          - goos: windows
+            goarch: amd64
+            ext: .exe
+          - goos: windows
+            goarch: arm64
+            ext: .exe
     steps:
       - uses: actions/checkout@v4
 
@@ -36,17 +42,17 @@ jobs:
           CGO_ENABLED: 0
         run: |
           VERSION=${GITHUB_REF_NAME#v}
-          go build -ldflags "-X main.version=${VERSION}" -o git-lint-${{ matrix.goos }}-${{ matrix.goarch }} .
+          go build -ldflags "-X main.version=${VERSION}" -o git-lint-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} .
 
       - name: Generate checksum
-        run: sha256sum git-lint-${{ matrix.goos }}-${{ matrix.goarch }} > git-lint-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+        run: sha256sum git-lint-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }} > git-lint-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}.sha256
 
       - uses: actions/upload-artifact@v4
         with:
           name: git-lint-${{ matrix.goos }}-${{ matrix.goarch }}
           path: |
-            git-lint-${{ matrix.goos }}-${{ matrix.goarch }}
-            git-lint-${{ matrix.goos }}-${{ matrix.goarch }}.sha256
+            git-lint-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}
+            git-lint-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.ext }}.sha256
 
   release:
     needs: build
